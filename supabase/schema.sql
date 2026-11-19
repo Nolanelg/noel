@@ -26,6 +26,8 @@ alter table public.cards add column if not exists unlock_at timestamptz;
 alter table public.cards add column if not exists voice_path text
   check (voice_path is null or voice_path ~ '^[A-Za-z0-9_-]{8,64}\.(webm|m4a|ogg)$');
 alter table public.cards add column if not exists owner_token text;
+alter table public.cards add column if not exists cinema text not null default 'lune'
+  check (cinema in ('lune', 'hyper', 'aurore', 'globe'));
 create unique index if not exists cards_owner_token_idx on public.cards (owner_token);
 
 -- Journal des visites et actions
@@ -110,11 +112,12 @@ create policy "admin se voit" on public.admins
 
 -- Crée une carte et renvoie son identifiant (utilisé dans le lien)
 drop function if exists public.create_card(text, text, text, text, text, text, text);
+drop function if exists public.create_card(text, text, text, text, text, text, text, timestamptz, text);
 create or replace function public.create_card(
   p_recipient text, p_message text, p_sender text,
   p_theme text, p_decor text, p_photo_path text default null,
   p_visitor_id text default null, p_unlock_at timestamptz default null,
-  p_voice_path text default null
+  p_voice_path text default null, p_cinema text default 'lune'
 )
 returns json
 language plpgsql security definer
@@ -135,7 +138,7 @@ begin
     new_id := translate(encode(gen_random_bytes(9), 'base64'), '+/', '-_');
     exit when not exists (select 1 from public.cards where id = new_id);
   end loop;
-  insert into public.cards (id, recipient, message, sender, theme, decor, photo_path, voice_path, unlock_at, owner_token)
+  insert into public.cards (id, recipient, message, sender, theme, decor, photo_path, voice_path, unlock_at, owner_token, cinema)
   values (
     new_id,
     left(coalesce(btrim(p_recipient), ''), 40),
@@ -146,7 +149,8 @@ begin
     nullif(p_photo_path, ''),
     nullif(p_voice_path, ''),
     v_unlock,
-    new_token
+    new_token,
+    case when p_cinema in ('lune', 'hyper', 'aurore', 'globe') then p_cinema else 'lune' end
   );
   insert into public.events (type, card_id, visitor_id)
   values ('create', new_id, left(p_visitor_id, 64));
@@ -161,7 +165,7 @@ create or replace function public.get_card(p_id text)
 returns table (
   id text, recipient text, message text, sender text,
   theme text, decor text, photo_path text, voice_path text,
-  unlock_at timestamptz, locked boolean, created_at timestamptz
+  unlock_at timestamptz, locked boolean, created_at timestamptz, cinema text
 )
 language sql stable security definer
 set search_path = public
@@ -171,7 +175,7 @@ as $$
          c.sender, c.theme, c.decor,
          case when l.locked then null else c.photo_path end,
          case when l.locked then null else c.voice_path end,
-         c.unlock_at, l.locked, c.created_at
+         c.unlock_at, l.locked, c.created_at, c.cinema
   from public.cards c
   cross join lateral (select coalesce(c.unlock_at > now(), false) as locked) l
   where c.id = p_id;
@@ -238,11 +242,11 @@ $$;
 
 drop function if exists public.get_followup(text);
 
-revoke all on function public.create_card(text, text, text, text, text, text, text, timestamptz, text) from public;
+revoke all on function public.create_card(text, text, text, text, text, text, text, timestamptz, text, text) from public;
 revoke all on function public.get_card(text) from public;
 revoke all on function public.log_event(text, text, text, text, text, text, text, text) from public;
 revoke all on function public.add_reply(text, text, text, text, text) from public;
-grant execute on function public.create_card(text, text, text, text, text, text, text, timestamptz, text) to anon, authenticated;
+grant execute on function public.create_card(text, text, text, text, text, text, text, timestamptz, text, text) to anon, authenticated;
 grant execute on function public.get_card(text) to anon, authenticated;
 grant execute on function public.log_event(text, text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.add_reply(text, text, text, text, text) to anon, authenticated;

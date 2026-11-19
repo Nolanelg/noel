@@ -154,6 +154,12 @@
         </fieldset>
 
         <fieldset class="field">
+          <legend>Cinématique d'ouverture</legend>
+          <div class="cinemas" id="cinemas"></div>
+          <button type="button" class="link-btn" id="cinema-preview">▶ Voir la cinématique choisie en plein écran</button>
+        </fieldset>
+
+        <fieldset class="field">
           <legend>Ambiance</legend>
           <div class="swatches" id="themes"></div>
         </fieldset>
@@ -185,6 +191,7 @@
     <!-- Cinématique d'introduction -->
     <div class="cine" id="cine" hidden>
       <div class="cine-veil"></div>
+      <canvas class="cine-canvas" id="cine-canvas" hidden></canvas>
       <div class="cine-bar top"></div>
       <div class="cine-bar bottom"></div>
       <div class="cine-gate" id="cine-gate">
@@ -288,6 +295,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="config.js"></script>
+  <script src="cinema.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

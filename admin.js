@@ -10,6 +10,7 @@
   const key = String(cfg.supabaseAnonKey || '').trim();
   const enabled = /^https:\/\/[^/]+$/.test(base) && key.length > 20;
 
+  const CINEMA_LABEL = { lune: 'Clair de lune', hyper: 'Hyperespace', aurore: 'Aurore boréale', globe: 'Boule à neige' };
   const THEME_LABEL = { nuit: 'Nuit étoilée', rouge: 'Rouge velours', foret: 'Forêt enneigée', givre: 'Givre' };
   const fmtDate = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const fmtDay = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
@@ -331,7 +332,7 @@
         h('td', { class: 'num', text: fmtDate.format(new Date(c.created_at)) }),
         h('td', { text: c.recipient || '—' }),
         h('td', { text: c.sender || '—' }),
-        h('td', { class: 'msg' }, msg, h('div', { class: 'muted', text: `${THEME_LABEL[c.theme] || c.theme} · ${c.decor}` }),
+        h('td', { class: 'msg' }, msg, h('div', { class: 'muted', text: `${THEME_LABEL[c.theme] || c.theme} · ${c.decor} · 🎬 ${CINEMA_LABEL[c.cinema] || 'Clair de lune'}` }),
           h('div', { class: 'tags' },
             c.unlock_at ? h('span', { class: 'pill' + (new Date(c.unlock_at) > new Date() ? '' : ' on'), text: '🔒 ' + fmtDate.format(new Date(c.unlock_at)) }) : null,
             c.voice_path ? h('span', { class: 'pill', text: '🎙️ vocal' }) : null),

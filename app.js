@@ -21,6 +21,12 @@
     givre: { label: 'Givre',          sw: ['#d9eaf7', '#4f86b8'], stars: .35, meta: '#0a1d36' },
   };
   const DECORS = { sapin: 'Sapin', etoile: 'Étoile', flocon: 'Flocon', cadeau: 'Cadeau', bougie: 'Bougie' };
+  const CINEMAS = {
+    lune:   { label: 'Clair de lune',  desc: 'Travelling sous la pleine lune, le traîneau passe' },
+    hyper:  { label: 'Hyperespace',    desc: 'Saut dans les étoiles, le prénom en poussière d’or' },
+    aurore: { label: 'Aurore boréale', desc: 'Aurores sur un lac gelé, des lucioles écrivent le prénom' },
+    globe:  { label: 'Boule à neige',  desc: 'Le village s’illumine, puis on plonge dans la boule' },
+  };
 
 
   /* ------------------------------------------------------------
@@ -48,6 +54,7 @@
       f: str(o.f, 40),
       th: THEMES[o.th] ? o.th : 'nuit',
       d: DECORS[o.d] ? o.d : 'sapin',
+      ci: CINEMAS[o.ci] ? o.ci : 'lune',
     };
   }
   const siteBase = () => location.href.split('#')[0];
@@ -141,7 +148,7 @@
       ]);
       const res = await rpc('create_card', {
         p_recipient: d.to, p_message: d.m, p_sender: d.f, p_theme: d.th, p_decor: d.d,
-        p_photo_path: photoPath, p_visitor_id: visitorId(),
+        p_photo_path: photoPath, p_visitor_id: visitorId(), p_cinema: d.ci,
         p_unlock_at: unlockAt ? unlockAt.toISOString() : null, p_voice_path: voicePath,
       });
       if (!res || typeof res.id !== 'string') throw new Error('identifiant manquant');
@@ -153,7 +160,7 @@
       const rows = await rpc('get_card', { p_id: id });
       const c = Array.isArray(rows) ? rows[0] : null;
       if (!c) return null;
-      const d = sanitize({ to: c.recipient, m: c.message || '', f: c.sender, th: c.theme, d: c.decor });
+      const d = sanitize({ to: c.recipient, m: c.message || '', f: c.sender, th: c.theme, d: c.decor, ci: c.cinema });
       d.ph = photoUrl(c.photo_path);
       d.voice = voiceUrl(c.voice_path);
       d.locked = !!c.locked;
@@ -894,7 +901,49 @@
       master.gain.setTargetAtTime(on ? .1 : .5, ctx.currentTime, .25);
     }
 
-    return { start, stop, chime, whoosh, pop, duck, get playing() { return playing; } };
+    // nappe d'accords qui monte doucement
+    function swell(dur = 4) {
+      if (!ensure()) return;
+      const t = ctx.currentTime;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(300, t);
+      lp.frequency.exponentialRampToValueAtTime(2600, t + dur * .7);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(.0001, t);
+      g.gain.exponentialRampToValueAtTime(.09, t + dur * .55);
+      g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      lp.connect(g); g.connect(master);
+      [261.63, 329.63, 392, 523.25, 659.25].forEach((f, i) => {
+        const o = ctx.createOscillator();
+        o.type = i % 2 ? 'triangle' : 'sine';
+        o.frequency.value = f;
+        o.detune.value = (Math.random() - .5) * 14;
+        o.connect(lp);
+        o.start(t); o.stop(t + dur + .1);
+      });
+    }
+
+    // grelots (boule à neige qu'on secoue)
+    function bells(dur = 2) {
+      if (!ensure()) return;
+      const t0 = ctx.currentTime;
+      for (let k = 0; k < dur * 12; k++) {
+        const t = t0 + k / 12 + Math.random() * .03;
+        const src = noise();
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 6000 + Math.random() * 3000; bp.Q.value = 5;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(.0001, t);
+        g.gain.exponentialRampToValueAtTime(.3, t + .004);
+        g.gain.exponentialRampToValueAtTime(.0001, t + .12);
+        src.connect(bp); bp.connect(g); g.connect(master);
+        src.start(t, Math.random()); src.stop(t + .14);
+        if (k % 3 === 0) bell(master, 2400 + Math.random() * 1600, t, .35, .03);
+      }
+    }
+
+    return { start, stop, chime, whoosh, pop, duck, swell, bells, get playing() { return playing; } };
   })();
 
   /* ------------------------------------------------------------
@@ -963,6 +1012,13 @@
         <input type="radio" name="theme" value="${k}">
         <span class="sw" style="--a:${t.sw[0]};--b:${t.sw[1]}"></span>
         <span class="sw-label">${t.label}</span>
+      </label>`).join('');
+    $('#cinemas').innerHTML = Object.entries(CINEMAS).map(([k, c]) => `
+      <label class="cinema-opt">
+        <input type="radio" name="cinema" value="${k}">
+        <span class="cth cth-${k}" aria-hidden="true"></span>
+        <b>${c.label}</b>
+        <small>${c.desc}</small>
       </label>`).join('');
     $('#decors').innerHTML = Object.entries(DECORS).map(([k, label]) => `
       <label class="decor-opt">
@@ -1081,6 +1137,7 @@
       fFrom.value = state.f;
       $(`input[name=theme][value=${state.th}]`).checked = true;
       $(`input[name=decor][value=${state.d}]`).checked = true;
+      $(`input[name=cinema][value=${state.ci}]`).checked = true;
       count.textContent = [...state.m].length;
     }
 
@@ -1117,6 +1174,13 @@
       const [x, y] = centerOf(e.target.closest('.swatch'));
       Sky.burst(x, y, 24, { power: 4, lift: 1 });
     });
+    $('#cinemas').addEventListener('change', e => {
+      state.ci = e.target.value;
+      save();
+      const [x, y] = centerOf(e.target.closest('.cinema-opt'));
+      Sky.burst(x, y, 20, { power: 3.5, lift: 1 });
+    });
+    $('#cinema-preview').addEventListener('click', () => $('#preview-full').click());
     $('#decors').addEventListener('change', e => {
       state.d = e.target.value;
       save();
@@ -1322,6 +1386,7 @@
       cancelAnimationFrame(sleighRAF);
       sleigh.style.opacity = '0';
       Sky.cancelComet();
+      if (window.Cinema) window.Cinema.stop();
     }
 
     function updateSpread() {
@@ -1448,6 +1513,15 @@
       if (reduceMotion) { endCinematic(false); return; }
       camUp();
       Sky.setNear(false);
+      if (data.ci !== 'lune' && window.Cinema && window.Cinema.kinds.includes(data.ci)) {
+        cine.className = 'cine run bars';
+        const sfx = soundOn ? {
+          whoosh: d => Music.whoosh(d), chime: () => Music.chime(),
+          swell: d => Music.swell(d), bells: d => Music.bells(d),
+        } : null;
+        window.Cinema.play(data.ci, data, { sfx, onEnd: () => endCinematic(true) });
+        return;
+      }
       cine.className = 'cine run veil bars';
       $('#cine-kicker').textContent = data.f ? `${data.f} a pensé à toi` : "Quelqu'un a pensé à toi";
       $('#cine-big').textContent = data.to ? `Pour ${data.to}` : 'Pour toi';

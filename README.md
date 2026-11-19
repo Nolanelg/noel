@@ -4,9 +4,11 @@ Un site pour créer et envoyer des cartes de vœux de Noël animées à ses proc
 
 - **Création** : destinataire, message, signature, **photo facultative** (façon Polaroïd), 4 ambiances
   (Nuit étoilée, Rouge velours, Forêt enneigée, Givre) et 5 illustrations animées. Un aperçu en 3D se met à jour en direct.
-- **Cinématique** : écran d'accueil, puis bandes noires façon cinéma, texte « Un soir de décembre… », travelling
-  du ciel vers les montagnes enneigées sous la pleine lune, traîneau qui passe devant la lune en laissant une traînée
-  dorée, titre « Pour Mamie », puis une comète qui tombe et fait apparaître l'enveloppe (bouton « Passer » disponible).
+- **4 cinématiques au choix** (bouton « Passer » disponible) :
+  - *Clair de lune* : bandes cinéma, travelling vers les montagnes sous la pleine lune, traîneau devant la lune, comète ;
+  - *Hyperespace* : saut dans les étoiles, nébuleuse, galaxie de particules dorées qui forme le prénom, implosion lumineuse ;
+  - *Aurore boréale* : la caméra se lève d'un lac gelé vers des aurores dansantes, des lucioles écrivent le prénom ;
+  - *Boule à neige* : la boule est secouée, le village s'illumine, le prénom se grave sur la plaque, puis plongée dans la boule.
 - **Ouverture** : on brise le sceau de cire, la lettre sort de l'enveloppe, la carte s'ouvre comme un livre,
   la photo se « développe », le message s'écrit à la machine, puis un feu d'artifice éclate.
   Une boîte à musique accompagne le tout (bouton pour couper le son).

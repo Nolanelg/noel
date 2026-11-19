@@ -923,3 +923,59 @@ input[type=datetime-local]:focus { outline: none; border-color: var(--accent); b
 
 .field > .photo-drop { text-transform: none; letter-spacing: 0; font-size: 1rem; color: #fff; font-weight: 400; }
 .photo-empty b { font-weight: 500; }
+
+/* ============================================================
+   CINÉMATIQUES : toile de dessin et choix dans l'atelier
+   ============================================================ */
+.cine-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+  opacity: 0; transition: opacity .9s ease;
+}
+.cine-canvas.on { opacity: 1; transition-duration: .4s; }
+
+.cinemas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cinema-opt {
+  position: relative; display: grid; gap: 8px; padding: 8px 8px 11px; cursor: pointer;
+  border-radius: 16px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(0, 0, 0, .16);
+  transition: border-color .2s, background .2s, transform .25s var(--ease-spring);
+}
+.cinema-opt:hover { transform: translateY(-2px); }
+.cinema-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.cinema-opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cinema-opt:has(input:focus-visible) { outline: 2px solid #fff; outline-offset: 2px; }
+.cinema-opt b { font-weight: 500; font-size: .92rem; padding: 0 4px; }
+.cinema-opt small { color: rgba(255, 255, 255, .6); font-size: .78rem; line-height: 1.35; padding: 0 4px; }
+.cth { position: relative; height: 78px; border-radius: 11px; overflow: hidden; isolation: isolate; }
+.cth::before, .cth::after { content: ""; position: absolute; inset: 0; }
+
+.cth-lune { background: radial-gradient(circle at 72% 34%, #fffbe9 0 11%, rgba(255, 246, 215, .3) 12%, transparent 30%), linear-gradient(#24346b, #070b1f); }
+.cth-lune::before { background: #34446f; clip-path: polygon(0 100%, 0 70%, 14% 52%, 28% 72%, 44% 46%, 60% 70%, 76% 50%, 90% 68%, 100% 58%, 100% 100%); }
+.cth-lune::after { background: #dfe7ff; clip-path: polygon(0 100%, 0 86%, 30% 80%, 60% 88%, 100% 80%, 100% 100%); }
+
+.cth-hyper { background: radial-gradient(circle, #fff 0 3%, #9fb8ff 6%, #23164d 32%, #02030a 72%); }
+.cth-hyper::before {
+  inset: -60%;
+  background: repeating-conic-gradient(from 0deg, transparent 0 9deg, rgba(210, 225, 255, .75) 9deg 10deg, transparent 10deg 17deg, rgba(255, 210, 122, .6) 17deg 18deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 8%, #000 40%); mask-image: radial-gradient(circle, transparent 8%, #000 40%);
+  animation: spin 9s linear infinite;
+}
+
+.cth-aurore { background: linear-gradient(#020510 0, #0b2a3d 58%, #01040a 58%); }
+.cth-aurore::before {
+  background:
+    radial-gradient(60% 40% at 30% 40%, rgba(61, 255, 176, .75), transparent 70%),
+    radial-gradient(50% 35% at 70% 30%, rgba(166, 107, 255, .6), transparent 70%);
+  filter: blur(4px); animation: auroraWave 4s ease-in-out infinite alternate;
+}
+.cth-aurore::after { background: #040b15; clip-path: polygon(0 58%, 18% 40%, 32% 54%, 50% 36%, 66% 52%, 82% 42%, 100% 56%, 100% 58%, 0 58%); }
+@keyframes auroraWave { to { transform: translateX(14%) scaleY(1.2); } }
+
+.cth-globe { background: radial-gradient(70% 90% at 50% 20%, #3b2a1a, #07070c 70%); }
+.cth-globe::before {
+  inset: 8px auto auto 50%; width: 52px; height: 52px; translate: -50% 0; border-radius: 50%;
+  background: radial-gradient(circle at 50% 120%, #fff 0 38%, transparent 39%), radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .45), transparent 30%), linear-gradient(#0b1438, #2a3f78);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .4), 0 0 18px rgba(255, 226, 176, .25);
+  animation: globeShake 3s ease-in-out infinite;
+}
+.cth-globe::after { inset: auto auto 6px 50%; width: 58px; height: 14px; translate: -50% 0; background: linear-gradient(90deg, #3a1d12, #7a3f24, #2c150c); clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%); }
+@keyframes globeShake { 0%, 60%, 100% { transform: rotate(0); } 66% { transform: rotate(-9deg); } 74% { transform: rotate(8deg); } 82% { transform: rotate(-5deg); } 90% { transform: rotate(3deg); } }
