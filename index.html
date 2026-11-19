@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carte de Noël</title>
+  <meta name="description" content="Crée et envoie une carte de vœux de Noël animée et personnalisée à tes proches.">
+  <meta property="og:title" content="Une carte de Noël pour toi 🎄">
+  <meta property="og:description" content="Ouvre l'enveloppe pour découvrir ton message…">
+  <meta name="theme-color" content="#060a1d">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Great+Vibes&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="nuit">
+
+  <!-- Décor de fond -->
+  <div class="sky" aria-hidden="true">
+    <div class="aurora a1"></div>
+    <div class="aurora a2"></div>
+    <div class="aurora a3"></div>
+  </div>
+  <canvas id="snow" aria-hidden="true"></canvas>
+  <svg class="hills" viewBox="0 0 1440 300" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <path class="h3" d="M0 170 C 180 110 320 150 480 120 C 640 90 760 150 920 115 C 1080 80 1260 140 1440 100 L1440 300 L0 300Z"/>
+    <g id="hill-trees" class="hill-trees"></g>
+    <path class="h2" d="M0 220 C 200 170 380 210 560 185 C 760 158 900 215 1100 190 C 1260 170 1360 200 1440 185 L1440 300 L0 300Z"/>
+    <path class="h1" d="M0 262 C 240 228 420 258 700 240 C 960 224 1160 262 1440 236 L1440 300 L0 300Z"/>
+  </svg>
+  <canvas id="fx" aria-hidden="true"></canvas>
+
+  <!-- ============ CRÉATION ============ -->
+  <main id="creator" class="creator" hidden>
+    <header class="hero">
+      <div class="brand"><span class="brand-star">✦</span> Atelier de Noël <span class="brand-star">✦</span></div>
+      <h1><span class="h-serif">Crée ta carte</span> <span class="h-script">de Noël</span></h1>
+      <p class="lead">Écris quelques mots, choisis une ambiance, et envoie une carte animée à ceux que tu aimes.</p>
+    </header>
+
+    <div class="workspace">
+      <form id="form" class="panel" autocomplete="off" novalidate>
+        <div class="field">
+          <label for="f-to">Pour</label>
+          <input type="text" id="f-to" maxlength="40" placeholder="Mamie, Papa, toute la famille…">
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="f-msg">Ton message</label>
+            <button type="button" class="chip" id="inspire">✨ Inspire-moi</button>
+          </div>
+          <textarea id="f-msg" maxlength="500" rows="6" placeholder="Que la magie de Noël…"></textarea>
+          <div class="counter"><span id="count">0</span>/500</div>
+        </div>
+
+        <div class="field">
+          <label for="f-from">De la part de</label>
+          <input type="text" id="f-from" maxlength="40" placeholder="Ton prénom">
+        </div>
+
+        <fieldset class="field">
+          <legend>Ambiance</legend>
+          <div class="swatches" id="themes"></div>
+        </fieldset>
+
+        <fieldset class="field">
+          <legend>Illustration</legend>
+          <div class="decors" id="decors"></div>
+        </fieldset>
+
+        <label class="switch">
+          <input type="checkbox" id="f-music" checked>
+          <span class="track"><span class="thumb"></span></span>
+          <span>Boîte à musique à l'ouverture 🎵</span>
+        </label>
+
+        <div class="actions">
+          <button type="button" class="btn ghost" id="preview-full">Aperçu plein écran</button>
+          <button type="submit" class="btn primary" id="create">Créer ma carte ✨</button>
+        </div>
+      </form>
+
+      <div class="preview-col">
+        <div class="preview-stage" id="preview-stage">
+          <div class="card3d" id="preview-card"><div class="tilt"></div></div>
+        </div>
+        <p class="preview-hint">Clique sur la carte pour l'ouvrir ou la refermer</p>
+      </div>
+    </div>
+
+    <footer class="foot">Fait avec ♥ pour la famille</footer>
+  </main>
+
+  <!-- ============ LECTURE ============ -->
+  <section id="viewer" class="viewer" hidden>
+    <button class="sound-btn" id="sound-btn" type="button" aria-label="Musique">🔊</button>
+
+    <div class="stage" id="stage">
+      <div class="card-glow" id="card-glow"></div>
+
+      <div class="env-wrap" id="env-wrap">
+        <p class="env-title" id="env-title"></p>
+        <div class="envelope" id="envelope" role="button" tabindex="0" aria-label="Ouvrir l'enveloppe">
+          <div class="env-back"></div>
+          <div class="env-letter"></div>
+          <div class="env-pocket">
+            <svg viewBox="0 0 155 100" preserveAspectRatio="none" aria-hidden="true">
+              <polygon points="0,0 74,52 0,100" class="pk-side"/>
+              <polygon points="155,0 81,52 155,100" class="pk-side"/>
+              <polygon points="0,100 77.5,46 155,100" class="pk-bottom"/>
+            </svg>
+            <span class="env-to" id="env-to"></span>
+          </div>
+          <div class="env-flap">
+            <svg viewBox="0 0 155 60" preserveAspectRatio="none" aria-hidden="true">
+              <polygon points="0,0 155,0 77.5,60"/>
+            </svg>
+          </div>
+          <div class="env-seal"><span>✦</span></div>
+        </div>
+        <p class="tap-hint">Touche l'enveloppe pour l'ouvrir</p>
+      </div>
+
+      <div class="card3d viewer-card" id="viewer-card"><div class="tilt"></div></div>
+    </div>
+
+    <div class="end-actions" id="end-actions">
+      <button class="btn ghost sm" id="replay" type="button">↺ Rejouer</button>
+      <a class="btn primary sm" id="make-own" href="./">Créer ma propre carte ✨</a>
+    </div>
+  </section>
+
+  <!-- ============ PARTAGE ============ -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal-close" id="modal-close" type="button" aria-label="Fermer">×</button>
+      <div class="modal-icon">🎁</div>
+      <h2 id="modal-title">Ta carte est prête !</h2>
+      <p>Envoie ce lien à tes proches : la carte s'ouvrira chez eux avec toutes ses animations.</p>
+      <div class="link-row">
+        <input type="text" id="share-link" readonly aria-label="Lien de la carte">
+        <button class="btn primary sm" id="copy-btn" type="button">Copier</button>
+      </div>
+      <div class="share-row">
+        <button class="btn ghost sm" id="native-share" type="button" hidden>Partager…</button>
+        <a class="btn ghost sm" id="wa-share" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="btn ghost sm" id="mail-share">E-mail</a>
+        <a class="btn ghost sm" id="open-card" target="_blank" rel="noopener">Voir la carte</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
