@@ -161,6 +161,7 @@ revoke all on function public.log_event(text, text, text, text, text, text, text
 grant execute on function public.create_card(text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.get_card(text) to anon, authenticated;
 grant execute on function public.log_event(text, text, text, text, text, text, text, text) to anon, authenticated;
+revoke execute on function public.is_admin() from public, anon;
 grant execute on function public.is_admin() to authenticated;
 
 -- ---------- Photos ----------

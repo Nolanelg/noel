@@ -11,6 +11,6 @@
    pas de photo, pas de statistiques, et le message est stocké dans le lien.
    ============================================================ */
 window.NOEL_CONFIG = {
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://lwmdooxsaqhhinvpxjqb.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3bWRvb3hzYXFoaGludnB4anFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUwNTM3MjIsImV4cCI6MjExMDYyOTcyMn0.g_VtMLjF_FSwzqyrBjTp42SRDsJP_y9e1nO3vw4qj7s',
 };

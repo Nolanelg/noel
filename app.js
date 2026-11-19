@@ -875,7 +875,6 @@
       </label>`).join('');
 
     $('#photo-field').hidden = !API.enabled;
-    $('#privacy-note').hidden = !API.enabled;
 
     function syncForm() {
       fTo.value = state.to;
