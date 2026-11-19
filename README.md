@@ -4,7 +4,7 @@ Un petit site pour créer et envoyer des cartes de vœux de Noël animées à se
 
 - **Création** : destinataire, message, signature, 4 ambiances
   (Nuit étoilée, Rouge velours, Forêt enneigée, Givre), 5 illustrations animées
-  (sapin, étoile, flocon, cadeau, bougie) et une boîte à musique optionnelle. Un aperçu en 3D se met à jour en direct.
+  (sapin, étoile, flocon, cadeau, bougie) et une boîte à musique qui se lance à l'ouverture (on peut couper le son). Un aperçu en 3D se met à jour en direct.
 - **Lecture** : une enveloppe flotte sous la neige. On brise le sceau de cire, le rabat s'ouvre, la lettre sort,
   puis la carte s'ouvre comme un livre. Une pluie d'étincelles accompagne le message, qui s'écrit à la machine.
   Il y a aussi des étoiles filantes et des aurores, et la neige suit le mouvement de la souris.

@@ -47,7 +47,6 @@
       f: str(o.f, 40),
       th: THEMES[o.th] ? o.th : 'nuit',
       d: DECORS[o.d] ? o.d : 'sapin',
-      mu: o.mu !== false,
     };
   }
   function cardLink(d) {
@@ -621,7 +620,7 @@
      Création
      ------------------------------------------------------------ */
   const Creator = (() => {
-    const fTo = $('#f-to'), fMsg = $('#f-msg'), fFrom = $('#f-from'), fMusic = $('#f-music');
+    const fTo = $('#f-to'), fMsg = $('#f-msg'), fFrom = $('#f-from');
     const count = $('#count');
     let state = sanitize(store.get() || {});
     let refs = null;
@@ -643,7 +642,6 @@
       fTo.value = state.to;
       fMsg.value = state.m;
       fFrom.value = state.f;
-      fMusic.checked = state.mu;
       $(`input[name=theme][value=${state.th}]`).checked = true;
       $(`input[name=decor][value=${state.d}]`).checked = true;
       count.textContent = [...state.m].length;
@@ -663,7 +661,6 @@
       state.to = fTo.value.trim();
       state.m = fMsg.value;
       state.f = fFrom.value.trim();
-      state.mu = fMusic.checked;
       count.textContent = [...state.m].length;
       save();
       updatePreview();
@@ -672,7 +669,6 @@
     fTo.addEventListener('input', () => { onInput(); refs.book.classList.add('open'); });
     fFrom.addEventListener('input', () => { onInput(); refs.book.classList.add('open'); });
     fMsg.addEventListener('input', () => { onInput(); refs.book.classList.add('open'); });
-    fMusic.addEventListener('change', onInput);
 
     $('#themes').addEventListener('change', e => {
       state.th = e.target.value;
@@ -782,6 +778,7 @@
     const tilt = $('#viewer-card .tilt'), glow = $('#card-glow');
     const endActions = $('#end-actions'), soundBtn = $('#sound-btn');
     let data = null, refs = null, timers = [], opened = false, typing = null, spread = false;
+    let soundOn = true; // son activé par défaut
 
     const later = (fn, ms) => timers.push(setTimeout(fn, reduceMotion ? ms * .25 : ms));
     function clear() {
@@ -800,8 +797,8 @@
     }
 
     function updateSoundIcon() {
-      soundBtn.textContent = Music.playing ? '🔊' : '🔇';
-      soundBtn.setAttribute('aria-label', Music.playing ? 'Couper la musique' : 'Lancer la musique');
+      soundBtn.textContent = soundOn ? '🔊' : '🔇';
+      soundBtn.setAttribute('aria-label', soundOn ? 'Couper le son' : 'Activer le son');
     }
 
     function setup(d) {
@@ -819,7 +816,6 @@
       refs = buildBook(tilt);
       fillBook(refs, d);
       refs.msg.textContent = '';
-      soundBtn.hidden = !d.mu;
       updateSoundIcon();
       updateSpread();
       document.title = d.to ? `Une carte pour ${d.to} 🎄` : 'Une carte de Noël pour toi 🎄';
@@ -828,9 +824,9 @@
     function open() {
       if (opened || !data) return;
       opened = true;
-      if (data.mu) {
+      if (soundOn) {
         Music.chime();
-        later(() => { Music.start(); updateSoundIcon(); }, 900);
+        later(() => { if (soundOn) Music.start(); }, 900);
       }
       const [sx, sy] = centerOf(env.querySelector('.env-seal'));
       Sky.burst(sx, sy, 45, { power: 5 });
@@ -879,7 +875,9 @@
     });
     attachTilt($('#viewer'), tilt, 9);
     soundBtn.addEventListener('click', () => {
-      if (Music.playing) Music.stop(); else Music.start();
+      soundOn = !soundOn;
+      if (!soundOn) Music.stop();
+      else if (opened) Music.start();
       updateSoundIcon();
     });
     $('#replay').addEventListener('click', () => setup(data));
