@@ -176,12 +176,6 @@
         <p class="preview-hint">Clique sur la carte pour l'ouvrir ou la refermer</p>
       </div>
     </div>
-
-    <section class="panel sent" id="sent" hidden>
-      <h2>Tes cartes envoyées</h2>
-      <p class="sent-hint">Retrouve ici le suivi de chaque carte : quand elle a été ouverte et les réponses reçues.</p>
-      <ul class="sent-list" id="sent-list"></ul>
-    </section>
   </main>
 
   <!-- ============ LECTURE ============ -->
@@ -248,25 +242,6 @@
     </div>
   </section>
 
-  <!-- ============ SUIVI DE L'EXPÉDITEUR ============ -->
-  <section id="followup" class="followup" hidden>
-    <div class="follow-wrap">
-      <a class="brand" href="./"><span class="brand-star">✦</span> Atelier de Noël <span class="brand-star">✦</span></a>
-      <h1 class="follow-title" id="fu-title">Suivi de ta carte</h1>
-      <p class="follow-sub" id="fu-sub"></p>
-      <div class="fu-stats" id="fu-stats"></div>
-      <div class="panel fu-panel">
-        <h2>Réponses</h2>
-        <ul class="fu-replies" id="fu-replies"></ul>
-      </div>
-      <div class="fu-actions">
-        <button class="btn ghost" type="button" id="fu-refresh">↻ Actualiser</button>
-        <a class="btn ghost" id="fu-open" target="_blank" rel="noopener">Revoir la carte</a>
-        <a class="btn primary" href="./" id="fu-new">Créer une autre carte ✨</a>
-      </div>
-    </div>
-  </section>
-
   <!-- ============ RÉPONSE DU DESTINATAIRE ============ -->
   <div class="modal" id="reply-modal" hidden>
     <form class="modal-card reply-card" id="reply-form" role="dialog" aria-modal="true" aria-labelledby="reply-title" novalidate>
@@ -306,10 +281,6 @@
         <a class="btn ghost sm" id="wa-share" target="_blank" rel="noopener">WhatsApp</a>
         <a class="btn ghost sm" id="mail-share">E-mail</a>
         <a class="btn ghost sm" id="open-card" target="_blank" rel="noopener">Voir la carte</a>
-      </div>
-      <div class="follow-box" id="follow-box" hidden>
-        <p><b>Ton lien de suivi</b>, rien que pour toi : tu y verras quand la carte est ouverte et les réponses reçues. Il est aussi enregistré en bas de l'atelier.</p>
-        <a class="btn ghost sm" id="follow-link" target="_blank" rel="noopener">Ouvrir mon suivi</a>
       </div>
     </div>
   </div>

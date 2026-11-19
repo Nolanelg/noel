@@ -109,8 +109,7 @@
     };
     const visitorId = () => store('noel-visitor', () => randomId(16));
 
-    // Cartes créées depuis ce navigateur (on ne compte pas leurs ouvertures,
-    // et l'expéditeur retrouve ses liens de suivi)
+    // Cartes créées depuis ce navigateur : on ne compte pas leurs ouvertures
     const mine = {
       list() {
         try {
@@ -165,9 +164,8 @@
     const addReply = (cardId, reaction, message, author) => rpc('add_reply', {
       p_card_id: cardId, p_reaction: reaction, p_message: message, p_author: author, p_visitor_id: visitorId(),
     });
-    const getFollowup = token => rpc('get_followup', { p_token: token });
 
-    return { enabled, track, createCard, getCard, addReply, getFollowup, mine };
+    return { enabled, track, createCard, getCard, addReply, mine };
   })();
 
   /* Réduit et compresse une photo en JPEG (1280 px max) */
@@ -1076,39 +1074,6 @@
       updatePreview();
     });
 
-    /* --- cartes envoyées depuis ce navigateur --- */
-    function renderSent() {
-      const list = API.mine.list().filter(x => x.token).reverse();
-      $('#sent').hidden = !API.enabled || !list.length;
-      $('#sent-list').replaceChildren(...list.map(x => {
-        const li = document.createElement('li');
-        const info = document.createElement('div');
-        const who = document.createElement('div');
-        who.className = 'who';
-        who.textContent = 'Pour ' + (x.to || 'quelqu’un');
-        const when = document.createElement('div');
-        when.className = 'when';
-        when.textContent = 'Créée ' + ago(x.at) + (x.unlock && new Date(x.unlock) > new Date() ? ` · 🔒 s'ouvre le ${fmtDay.format(new Date(x.unlock))}` : '');
-        info.append(who, when);
-        const acts = document.createElement('div');
-        acts.className = 'acts';
-        const follow = document.createElement('a');
-        follow.className = 'btn ghost sm';
-        follow.href = '#suivi=' + encodeURIComponent(x.token);
-        follow.textContent = 'Voir le suivi';
-        const copy = document.createElement('button');
-        copy.type = 'button';
-        copy.className = 'btn ghost sm';
-        copy.textContent = 'Copier le lien';
-        copy.addEventListener('click', async () => {
-          const link = siteBase() + '#k=' + x.id;
-          try { await navigator.clipboard.writeText(link); toast('Lien copié 💌'); } catch { prompt('Lien de la carte :', link); }
-        });
-        acts.append(follow, copy);
-        li.append(info, acts);
-        return li;
-      }));
-    }
 
     function syncForm() {
       fTo.value = state.to;
@@ -1257,11 +1222,7 @@
       btn.textContent = photoBlob || sendVoice ? 'Envoi en cours…' : 'Création…';
       try {
         const res = await API.createCard(state, { photo: photoBlob, voice: sendVoice, unlockAt: optLock.checked ? unlockAt : null });
-        Share.open(siteBase() + '#k=' + res.id, state, {
-          follow: siteBase() + '#suivi=' + res.token,
-          unlockAt: optLock.checked ? unlockAt : null,
-        });
-        renderSent();
+        Share.open(siteBase() + '#k=' + res.id, state, { unlockAt: optLock.checked ? unlockAt : null });
         celebrate();
       } catch {
         toast("Oups, la carte n'a pas pu être créée. Vérifie ta connexion et réessaie.");
@@ -1279,7 +1240,6 @@
         showPhotoUI();
         showVoice();
         syncLock();
-        renderSent();
         updatePreview();
         document.title = 'Crée ta carte de Noël ✨';
       },
@@ -1295,8 +1255,6 @@
 
     function open(link, d, extra = {}) {
       url = link;
-      $('#follow-box').hidden = !extra.follow;
-      if (extra.follow) $('#follow-link').href = extra.follow;
       $('#lock-note').hidden = !extra.unlockAt;
       if (extra.unlockAt) $('#lock-note').textContent = `🔒 Elle ne pourra être ouverte qu'à partir du ${fmtWhen.format(extra.unlockAt)}.`;
       const text = d.to ? `${d.to}, j'ai une carte de Noël pour toi ✨` : "J'ai une carte de Noël pour toi ✨";
@@ -1685,7 +1643,7 @@
         await API.addReply(cardId, reaction, msg.value.trim(), author.value.trim());
         $('#reply-step').hidden = true;
         $('#reply-done').hidden = false;
-        $('#reply-done-title').textContent = sender ? `${sender} va recevoir ta réponse !` : 'Réponse envoyée !';
+        $('#reply-done-title').textContent = 'Réponse envoyée !';
         $('#reply-ok').focus();
         const [W, H] = Sky.size();
         Sky.burst(W / 2, H * .4, 90, { power: 9 });
@@ -1708,107 +1666,11 @@
   })();
 
   /* ------------------------------------------------------------
-     Page de suivi de l'expéditeur
-     ------------------------------------------------------------ */
-  const Followup = (() => {
-    const sec = $('#followup');
-    let token = '', timer = 0;
-
-    function stat(value, label) {
-      const d = document.createElement('div');
-      d.className = 'fu-stat';
-      const b = document.createElement('b');
-      b.textContent = value;
-      const sp = document.createElement('span');
-      sp.textContent = label;
-      d.append(b, sp);
-      return d;
-    }
-
-    function render(f) {
-      setTheme(THEMES[f.theme] ? f.theme : 'nuit');
-      $('#fu-title').textContent = f.recipient ? `Ta carte pour ${f.recipient}` : 'Ta carte';
-      $('#fu-sub').textContent = `Créée ${ago(f.created_at)}` + (f.sender ? `, signée ${f.sender}` : '');
-      const locked = f.unlock_at && new Date(f.unlock_at) > new Date();
-      const stats = [
-        stat(f.opens > 0 ? `${f.opens} fois` : 'Pas encore', 'ouverte'),
-        stat(f.last_opened_at ? ago(f.last_opened_at) : '—', 'dernière ouverture'),
-        stat(String(f.replies.length), f.replies.length > 1 ? 'réponses' : 'réponse'),
-      ];
-      if (locked) stats.push(stat('🔒 ' + fmtDay.format(new Date(f.unlock_at)), 'date d’ouverture'));
-      $('#fu-stats').replaceChildren(...stats);
-      const list = $('#fu-replies');
-      if (!f.replies.length) {
-        const li = document.createElement('li');
-        li.className = 'fu-empty';
-        li.textContent = locked ? 'La carte n’est pas encore ouverte. Les réponses arriveront ici ✨' : 'Pas encore de réponse. Reviens un peu plus tard ✨';
-        list.replaceChildren(li);
-      } else {
-        list.replaceChildren(...f.replies.map((x, i) => {
-          const li = document.createElement('li');
-          li.style.animationDelay = (i * .06) + 's';
-          const em = document.createElement('span');
-          em.className = 'r-emoji';
-          em.textContent = x.reaction || '💬';
-          const m = document.createElement('div');
-          m.className = 'r-msg';
-          m.textContent = x.message || 'a réagi à ta carte';
-          const meta = document.createElement('div');
-          meta.className = 'r-meta';
-          meta.textContent = `${x.author || 'Anonyme'} · ${ago(x.created_at)}`;
-          li.append(em, m, meta);
-          return li;
-        }));
-      }
-      $('#fu-open').href = `#k=${encodeURIComponent(f.id)}&notrack`;
-      $('#fu-open').hidden = false;
-      document.title = f.recipient ? `Suivi · carte pour ${f.recipient}` : 'Suivi de ta carte';
-    }
-
-    async function load(showErrors) {
-      try {
-        const f = await API.getFollowup(token);
-        if (!f) {
-          $('#fu-title').textContent = 'Lien de suivi introuvable';
-          $('#fu-sub').textContent = 'Vérifie que le lien est complet.';
-          $('#fu-stats').replaceChildren();
-          $('#fu-replies').replaceChildren();
-          $('#fu-open').hidden = true;
-          return;
-        }
-        render(f);
-      } catch {
-        if (showErrors) toast('Impossible de charger le suivi. Vérifie ta connexion.');
-      }
-    }
-
-    $('#fu-refresh').addEventListener('click', () => load(true));
-
-    return {
-      show(t) {
-        token = t;
-        sec.hidden = false;
-        scrollTo(0, 0);
-        $('#fu-title').textContent = 'Chargement…';
-        $('#fu-sub').textContent = '';
-        $('#fu-stats').replaceChildren();
-        $('#fu-replies').replaceChildren();
-        load(true);
-        clearInterval(timer);
-        timer = setInterval(() => { if (!document.hidden) load(false); }, 30000);
-      },
-      hide() { sec.hidden = true; clearInterval(timer); },
-    };
-  })();
-
-  /* ------------------------------------------------------------
      Navigation
      ------------------------------------------------------------ */
   function parseHash() {
     const h = location.hash;
-    let m = h.match(/[#&]suivi=([A-Za-z0-9_-]{20,64})/);
-    if (m) return { kind: 'followup', token: m[1] };
-    m = h.match(/[#&]k=([A-Za-z0-9_-]{6,32})/);
+    let m = h.match(/[#&]k=([A-Za-z0-9_-]{6,32})/);
     if (m) return { kind: 'remote', id: m[1], notrack: /[#&]notrack\b/.test(h) };
     if (/^#apercu\b/.test(h)) return previewData ? { kind: 'local', data: previewData, preview: true } : null;
     m = h.match(/[#&]c=([^&]+)/);
@@ -1821,7 +1683,6 @@
   function showViewer(theme) {
     Share.close();
     Reply.close();
-    Followup.hide();
     $('#creator').hidden = true;
     $('#viewer').hidden = false;
     document.body.classList.add('v-mode');
@@ -1834,7 +1695,6 @@
   function showCreator() {
     Viewer.stop();
     Reply.close();
-    Followup.hide();
     $('#viewer').hidden = true;
     $('#creator').hidden = false;
     document.body.classList.remove('v-mode');
@@ -1847,17 +1707,6 @@
   async function route() {
     const seq = ++routeSeq;
     const r = parseHash();
-    if (r && r.kind === 'followup') {
-      Share.close();
-      Viewer.stop();
-      $('#creator').hidden = true;
-      $('#viewer').hidden = true;
-      document.body.classList.remove('v-mode');
-      Sky.setNear(false);
-      if (!API.enabled) { showCreator(); return; }
-      Followup.show(r.token);
-      return;
-    }
     if (r && r.kind === 'remote') {
       showViewer(null);
       Viewer.loading();

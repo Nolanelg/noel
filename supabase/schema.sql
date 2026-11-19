@@ -21,7 +21,7 @@ create table if not exists public.cards (
   opens          integer not null default 0,
   last_opened_at timestamptz
 );
--- Ajouts : date d'ouverture, message vocal, lien de suivi privé de l'expéditeur
+-- Ajouts : date d'ouverture, message vocal (owner_token : ancien suivi, inutilisé)
 alter table public.cards add column if not exists unlock_at timestamptz;
 alter table public.cards add column if not exists voice_path text
   check (voice_path is null or voice_path ~ '^[A-Za-z0-9_-]{8,64}\.(webm|m4a|ogg)$');
@@ -108,8 +108,7 @@ create policy "admin se voit" on public.admins
 
 -- ---------- Fonctions appelées par le site ----------
 
--- Crée une carte. Renvoie son identifiant (pour le lien) et un jeton
--- secret qui donne accès à la page de suivi de l'expéditeur.
+-- Crée une carte et renvoie son identifiant (utilisé dans le lien)
 drop function if exists public.create_card(text, text, text, text, text, text, text);
 create or replace function public.create_card(
   p_recipient text, p_message text, p_sender text,
@@ -237,36 +236,16 @@ begin
 end;
 $$;
 
--- Page de suivi de l'expéditeur (accessible uniquement avec le jeton secret)
-create or replace function public.get_followup(p_token text)
-returns json
-language sql stable security definer
-set search_path = public
-as $$
-  select json_build_object(
-    'id', c.id, 'recipient', c.recipient, 'sender', c.sender, 'theme', c.theme,
-    'created_at', c.created_at, 'opens', c.opens, 'last_opened_at', c.last_opened_at,
-    'unlock_at', c.unlock_at,
-    'replies', coalesce((
-      select json_agg(json_build_object('reaction', r.reaction, 'message', r.message,
-                                        'author', r.author, 'created_at', r.created_at)
-                      order by r.created_at desc)
-      from public.replies r where r.card_id = c.id), '[]'::json)
-  )
-  from public.cards c
-  where c.owner_token = p_token and char_length(p_token) >= 20;
-$$;
+drop function if exists public.get_followup(text);
 
 revoke all on function public.create_card(text, text, text, text, text, text, text, timestamptz, text) from public;
 revoke all on function public.get_card(text) from public;
 revoke all on function public.log_event(text, text, text, text, text, text, text, text) from public;
 revoke all on function public.add_reply(text, text, text, text, text) from public;
-revoke all on function public.get_followup(text) from public;
 grant execute on function public.create_card(text, text, text, text, text, text, text, timestamptz, text) to anon, authenticated;
 grant execute on function public.get_card(text) to anon, authenticated;
 grant execute on function public.log_event(text, text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.add_reply(text, text, text, text, text) to anon, authenticated;
-grant execute on function public.get_followup(text) to anon, authenticated;
 revoke execute on function public.is_admin() from public, anon;
 grant execute on function public.is_admin() to authenticated;
 
