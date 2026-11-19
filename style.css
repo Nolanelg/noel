@@ -185,7 +185,7 @@ form.panel {
 }
 
 .field { display: grid; gap: 9px; border: 0; margin: 0; padding: 0; min-width: 0; }
-.field > label, legend, .label-row > label {
+.field > label, legend {
   font-size: .76rem; letter-spacing: .14em; text-transform: uppercase;
   color: rgba(245, 241, 232, .7); font-weight: 500; padding: 0; margin-bottom: 0;
 }
@@ -203,20 +203,8 @@ input[type=text]:focus, textarea:focus {
   outline: none; border-color: var(--accent); background: rgba(0, 0, 0, .28);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-textarea.flash { animation: flash .9s ease; }
-@keyframes flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 .shake { animation: shake .4s ease; }
 
-.label-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.chip {
-  font-size: .82rem; color: var(--accent); cursor: pointer;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-radius: 99px; padding: 6px 13px;
-  transition: transform .2s var(--ease-spring), background .2s;
-}
-.chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); transform: translateY(-2px); }
-.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .counter { justify-self: end; font-size: .75rem; color: rgba(255, 255, 255, .45); }
 
 /* Pastilles de thème */

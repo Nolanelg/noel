@@ -2,7 +2,7 @@
 
 Un petit site pour créer et envoyer des cartes de vœux de Noël animées à ses proches.
 
-- **Création** : destinataire, message (avec un bouton « Inspire-moi »), signature, 4 ambiances
+- **Création** : destinataire, message, signature, 4 ambiances
   (Nuit étoilée, Rouge velours, Forêt enneigée, Givre), 5 illustrations animées
   (sapin, étoile, flocon, cadeau, bougie) et une boîte à musique optionnelle. Un aperçu en 3D se met à jour en direct.
 - **Lecture** : une enveloppe flotte sous la neige. On brise le sceau de cire, le rabat s'ouvre, la lettre sort,

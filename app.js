@@ -21,16 +21,6 @@
   };
   const DECORS = { sapin: 'Sapin', etoile: 'Étoile', flocon: 'Flocon', cadeau: 'Cadeau', bougie: 'Bougie' };
 
-  const INSPIRATIONS = [
-    "Que la magie de Noël illumine ton cœur et ta maison. Je te souhaite des fêtes pleines de rires, de douceur et de chocolat chaud. Je t'embrasse très fort !",
-    `Joyeux Noël ! Merci d'être toujours là. Que ${NEXT_YEAR} t'apporte autant de bonheur que tu en donnes autour de toi.`,
-    "Plein de paillettes, de guirlandes et de gros câlins pour ce Noël. Profite bien de chaque instant en famille ! 🎄",
-    `Une petite carte pour te dire que je pense fort à toi. Que tes fêtes soient douces et lumineuses, et que ${NEXT_YEAR} réalise tous tes souhaits.`,
-    "Ho ho ho ! Le Père Noël m'a confié que tu avais été très sage cette année… Passe de merveilleuses fêtes !",
-    "Que ce Noël soit rempli de belles surprises, de bons repas et de moments précieux avec ceux que tu aimes. Belle et heureuse année !",
-    "Loin des yeux mais près du cœur : je t'envoie toute ma tendresse pour ces fêtes. Vivement qu'on se retrouve !",
-    "Que les étoiles de Noël brillent pour toi cette année, et que chaque jour de la nouvelle année t'apporte une raison de sourire. ✨",
-  ];
 
   /* ------------------------------------------------------------
      Encodage du lien (UTF-8 → base64url)
@@ -699,18 +689,6 @@
       refs.book.classList.remove('open');
     });
 
-    let lastInspire = -1;
-    $('#inspire').addEventListener('click', e => {
-      let i;
-      do { i = Math.floor(Math.random() * INSPIRATIONS.length); } while (i === lastInspire && INSPIRATIONS.length > 1);
-      lastInspire = i;
-      fMsg.value = INSPIRATIONS[i];
-      fMsg.classList.remove('flash'); void fMsg.offsetWidth; fMsg.classList.add('flash');
-      onInput();
-      refs.book.classList.add('open');
-      const [x, y] = centerOf(e.currentTarget);
-      Sky.burst(x, y, 20, { power: 3.5, lift: 1.5 });
-    });
 
     const previewStage = $('#preview-stage');
     previewStage.addEventListener('click', () => refs && refs.book.classList.toggle('open'));
