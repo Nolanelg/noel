@@ -130,6 +130,11 @@
     .feed .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .feed .meta { color: var(--muted); font-size: .8rem; }
     .feed .when { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+    .feed.replies .ico { font-size: 1.6rem; }
+    .feed.replies .what { white-space: normal; }
+    .feed.replies .rmsg { font-family: var(--serif); font-size: 1.1rem; font-style: italic; white-space: pre-wrap; }
+    .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    td audio { height: 32px; max-width: 220px; margin-top: 6px; display: block; }
   </style>
 </head>
 <body>
@@ -207,10 +212,16 @@
       <p class="hint">Clique sur un message pour le lire en entier. Les ouvertures faites depuis le navigateur qui a créé la carte ne sont pas comptées.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Créée</th><th>Pour</th><th>De</th><th>Message</th><th>Photo</th><th>Ouvertures</th><th>Dernière ouverture</th><th></th></tr></thead>
+          <thead><tr><th>Créée</th><th>Pour</th><th>De</th><th>Message</th><th>Photo</th><th>Ouvertures</th><th>Réponses</th><th>Dernière ouverture</th><th></th></tr></thead>
           <tbody id="cards"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel">
+      <h2>Réponses reçues</h2>
+      <p class="hint">Les mots et réactions laissés par les destinataires.</p>
+      <ul class="feed replies" id="replies"></ul>
     </section>
 
     <section class="panel">

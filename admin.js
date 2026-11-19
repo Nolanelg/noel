@@ -120,14 +120,15 @@
   }
 
   /* ---------------- Données ---------------- */
-  let cards = [], events = [], days = 30;
+  let cards = [], events = [], replies = [], days = 30;
 
   async function load() {
     $('#refresh').disabled = true;
     try {
-      [cards, events] = await Promise.all([
+      [cards, events, replies] = await Promise.all([
         api('/rest/v1/cards?select=*&order=created_at.desc&limit=2000'),
         api('/rest/v1/events?select=id,created_at,type,card_id,visitor_id,page,referrer,user_agent,lang&order=created_at.desc&limit=10000'),
+        api('/rest/v1/replies?select=*&order=created_at.desc&limit=2000'),
       ]);
       $('#updated').textContent = 'Mis à jour à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       render();
@@ -193,6 +194,7 @@
     const visitors = new Set(visits.map(e => e.visitor_id).filter(Boolean));
     const openedCards = cs.filter(c => c.opens > 0).length;
     const opens = ev.filter(e => e.type === 'open').length;
+    const rs = replies.filter(inRange);
 
     const kpi = (label, value, sub) => h('div', { class: 'kpi' },
       h('div', { class: 'label', text: label }),
@@ -204,6 +206,7 @@
       kpi('Cartes créées', nf.format(cs.length)),
       kpi('Cartes ouvertes', nf.format(openedCards), cs.length ? `sur ${nf.format(cs.length)} (${Math.round(openedCards / cs.length * 100)} %)` : '—'),
       kpi('Ouvertures', nf.format(opens), 'enveloppes ouvertes'),
+      kpi('Réponses', nf.format(rs.length), 'mots et réactions reçus'),
     );
 
     renderChart(visits);
@@ -216,6 +219,7 @@
     renderRows('#sources', visits.map(e => source(e.referrer)));
 
     renderCards(cs);
+    renderReplies(rs);
     renderFeed(ev.slice(0, 60));
   }
 
@@ -294,7 +298,7 @@
   function renderCards(cs) {
     const body = $('#cards');
     if (!cs.length) {
-      body.replaceChildren(h('tr', {}, h('td', { colspan: 8, class: 'empty', text: 'Aucune carte créée sur cette période.' })));
+      body.replaceChildren(h('tr', {}, h('td', { colspan: 9, class: 'empty', text: 'Aucune carte créée sur cette période.' })));
       return;
     }
     body.replaceChildren(...cs.map(c => {
@@ -313,9 +317,11 @@
         del.disabled = true; del.textContent = '…';
         try {
           if (c.photo_path) await api(`/storage/v1/object/photos/${encodeURIComponent(c.photo_path)}`, { method: 'DELETE' }).catch(() => {});
+          if (c.voice_path) await api(`/storage/v1/object/voix/${encodeURIComponent(c.voice_path)}`, { method: 'DELETE' }).catch(() => {});
           await api(`/rest/v1/cards?id=eq.${encodeURIComponent(c.id)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
           cards = cards.filter(x => x.id !== c.id);
           events = events.filter(x => x.card_id !== c.id);
+          replies = replies.filter(x => x.card_id !== c.id);
           render();
         } catch {
           del.disabled = false; del.textContent = 'Erreur, réessayer'; armed = null; del.classList.remove('armed');
@@ -325,9 +331,14 @@
         h('td', { class: 'num', text: fmtDate.format(new Date(c.created_at)) }),
         h('td', { text: c.recipient || '—' }),
         h('td', { text: c.sender || '—' }),
-        h('td', { class: 'msg' }, msg, h('div', { class: 'muted', text: `${THEME_LABEL[c.theme] || c.theme} · ${c.decor}` })),
+        h('td', { class: 'msg' }, msg, h('div', { class: 'muted', text: `${THEME_LABEL[c.theme] || c.theme} · ${c.decor}` }),
+          h('div', { class: 'tags' },
+            c.unlock_at ? h('span', { class: 'pill' + (new Date(c.unlock_at) > new Date() ? '' : ' on'), text: '🔒 ' + fmtDate.format(new Date(c.unlock_at)) }) : null,
+            c.voice_path ? h('span', { class: 'pill', text: '🎙️ vocal' }) : null),
+          c.voice_path ? h('audio', { controls: true, preload: 'none', src: `${base}/storage/v1/object/public/voix/${encodeURIComponent(c.voice_path)}` }) : null),
         h('td', {}, photo ? h('a', { href: photo, target: '_blank', rel: 'noopener' }, h('img', { class: 'thumb', src: photo, alt: 'Photo', loading: 'lazy' })) : h('span', { class: 'muted', text: '—' })),
         h('td', {}, h('span', { class: 'pill' + (c.opens > 0 ? ' on' : ''), text: c.opens > 0 ? `${c.opens} fois` : 'pas encore' })),
+        h('td', { class: 'num', text: (() => { const n = replies.filter(x => x.card_id === c.id); return n.length ? `${n.length} ${n.map(x => x.reaction || '💬').join('')}` : '—'; })() }),
         h('td', { class: 'muted', text: c.last_opened_at ? ago(c.last_opened_at) : '—' }),
         h('td', {}, h('div', { class: 'actions-cell' },
           h('a', { class: 'btn ghost sm', href: `./#k=${encodeURIComponent(c.id)}&notrack`, target: '_blank', rel: 'noopener', text: 'Voir' }),
@@ -336,11 +347,27 @@
     }));
   }
 
+  function renderReplies(list) {
+    const box = $('#replies');
+    if (!list.length) { box.replaceChildren(h('li', { class: 'empty', text: 'Pas encore de réponse.' })); return; }
+    const byId = new Map(cards.map(c => [c.id, c]));
+    box.replaceChildren(...list.map(r => {
+      const c = byId.get(r.card_id);
+      const ctx = c ? `réponse à la carte pour ${c.recipient || 'quelqu’un'}${c.sender ? ' (de ' + c.sender + ')' : ''}` : '';
+      return h('li', {},
+        h('span', { class: 'ico', text: r.reaction || '💬' }),
+        h('div', { class: 'what' },
+          r.message ? h('div', { class: 'rmsg', text: r.message }) : null,
+          h('div', { class: 'meta', text: [r.author || 'Anonyme', ctx].filter(Boolean).join(' · ') })),
+        h('span', { class: 'when', text: ago(r.created_at), title: fmtDate.format(new Date(r.created_at)) }));
+    }));
+  }
+
   function renderFeed(list) {
     const feed = $('#feed');
     if (!list.length) { feed.replaceChildren(h('li', { class: 'empty', text: 'Rien pour l’instant.' })); return; }
     const byId = new Map(cards.map(c => [c.id, c]));
-    const ICON = { visit: '👀', view: '💌', open: '✉️', create: '🎁' };
+    const ICON = { visit: '👀', view: '💌', open: '✉️', create: '🎁', reply: '💬' };
     feed.replaceChildren(...list.map(e => {
       const c = e.card_id ? byId.get(e.card_id) : null;
       const who = c ? (c.recipient || 'quelqu’un') : '';
@@ -349,8 +376,9 @@
         view: c ? `Carte pour ${who} affichée` : 'Carte affichée',
         open: c ? `${who} a ouvert sa carte` : 'Carte ouverte',
         create: c ? `Nouvelle carte pour ${who}${c.sender ? ' (de ' + c.sender + ')' : ''}` : 'Nouvelle carte',
+        reply: c ? `${who} a répondu à la carte` : 'Nouvelle réponse',
       }[e.type] || e.type;
-      const meta = e.type === 'create' ? '' : [device(e.user_agent), system(e.user_agent), source(e.referrer)].join(' · ');
+      const meta = e.type === 'create' || e.type === 'reply' ? '' : [device(e.user_agent), system(e.user_agent), source(e.referrer)].join(' · ');
       return h('li', {},
         h('span', { class: 'ico', text: ICON[e.type] || '•' }),
         h('div', { class: 'what' }, h('div', { text: what }), meta ? h('div', { class: 'meta', text: meta }) : null),

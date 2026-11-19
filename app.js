@@ -85,18 +85,20 @@
       const txt = await res.text();
       return txt ? JSON.parse(txt) : null;
     }
-    async function uploadPhoto(blob) {
-      const name = randomId(20) + '.jpg';
-      const res = await fetch(`${base}/storage/v1/object/photos/${name}`, {
+    async function upload(bucket, blob, ext, type) {
+      const name = randomId(20) + '.' + ext;
+      const res = await fetch(`${base}/storage/v1/object/${bucket}/${name}`, {
         method: 'POST',
-        headers: headers({ 'Content-Type': 'image/jpeg', 'x-upsert': 'false' }),
+        headers: headers({ 'Content-Type': type, 'x-upsert': 'false' }),
         body: blob,
       });
-      if (!res.ok) throw new Error('photo : ' + res.status);
+      if (!res.ok) throw new Error(bucket + ' : ' + res.status);
       return name;
     }
     const photoUrl = path => (path && /^[A-Za-z0-9_-]{8,64}\.jpg$/.test(path))
       ? `${base}/storage/v1/object/public/photos/${path}` : '';
+    const voiceUrl = path => (path && /^[A-Za-z0-9_-]{8,64}\.(webm|m4a|ogg)$/.test(path))
+      ? `${base}/storage/v1/object/public/voix/${path}` : '';
 
     const store = (k, fallback) => {
       try {
@@ -106,11 +108,20 @@
       } catch { return fallback(); }
     };
     const visitorId = () => store('noel-visitor', () => randomId(16));
-    // Les cartes créées depuis ce navigateur : on ne compte pas leurs ouvertures
+
+    // Cartes créées depuis ce navigateur (on ne compte pas leurs ouvertures,
+    // et l'expéditeur retrouve ses liens de suivi)
     const mine = {
-      list() { try { return JSON.parse(localStorage.getItem('noel-mine') || '[]'); } catch { return []; } },
-      add(id) { try { localStorage.setItem('noel-mine', JSON.stringify([...this.list(), id].slice(-200))); } catch { /* ignoré */ } },
-      has(id) { return this.list().includes(id); },
+      list() {
+        try {
+          const raw = JSON.parse(localStorage.getItem('noel-mine') || '[]');
+          return raw.map(x => (typeof x === 'string' ? { id: x } : x)).filter(x => x && x.id);
+        } catch { return []; }
+      },
+      add(entry) {
+        try { localStorage.setItem('noel-mine', JSON.stringify([...this.list(), entry].slice(-200))); } catch { /* ignoré */ }
+      },
+      has(id) { return this.list().some(x => x.id === id); },
     };
 
     function track(type, cardId = null, page = null) {
@@ -124,27 +135,39 @@
       }).catch(() => {});
     }
 
-    async function createCard(d, photoBlob) {
-      const path = photoBlob ? await uploadPhoto(photoBlob) : null;
-      const id = await rpc('create_card', {
+    async function createCard(d, { photo = null, voice = null, unlockAt = null } = {}) {
+      const [photoPath, voicePath] = await Promise.all([
+        photo ? upload('photos', photo, 'jpg', 'image/jpeg') : null,
+        voice ? upload('voix', voice.blob, voice.ext, voice.type) : null,
+      ]);
+      const res = await rpc('create_card', {
         p_recipient: d.to, p_message: d.m, p_sender: d.f, p_theme: d.th, p_decor: d.d,
-        p_photo_path: path, p_visitor_id: visitorId(),
+        p_photo_path: photoPath, p_visitor_id: visitorId(),
+        p_unlock_at: unlockAt ? unlockAt.toISOString() : null, p_voice_path: voicePath,
       });
-      if (typeof id !== 'string') throw new Error('identifiant manquant');
-      mine.add(id);
-      return id;
+      if (!res || typeof res.id !== 'string') throw new Error('identifiant manquant');
+      mine.add({ id: res.id, token: res.token, to: d.to, at: new Date().toISOString(), unlock: unlockAt ? unlockAt.toISOString() : null });
+      return res;
     }
 
     async function getCard(id) {
       const rows = await rpc('get_card', { p_id: id });
       const c = Array.isArray(rows) ? rows[0] : null;
       if (!c) return null;
-      const d = sanitize({ to: c.recipient, m: c.message, f: c.sender, th: c.theme, d: c.decor });
+      const d = sanitize({ to: c.recipient, m: c.message || '', f: c.sender, th: c.theme, d: c.decor });
       d.ph = photoUrl(c.photo_path);
+      d.voice = voiceUrl(c.voice_path);
+      d.locked = !!c.locked;
+      d.unlockAt = c.unlock_at ? new Date(c.unlock_at) : null;
       return d;
     }
 
-    return { enabled, track, createCard, getCard, mine };
+    const addReply = (cardId, reaction, message, author) => rpc('add_reply', {
+      p_card_id: cardId, p_reaction: reaction, p_message: message, p_author: author, p_visitor_id: visitorId(),
+    });
+    const getFollowup = token => rpc('get_followup', { p_token: token });
+
+    return { enabled, track, createCard, getCard, addReply, getFollowup, mine };
   })();
 
   /* Réduit et compresse une photo en JPEG (1280 px max) */
@@ -313,6 +336,9 @@
             <figure class="polaroid" hidden><img alt="Photo jointe à la carte"></figure>
             <p class="greet"></p>
             <div class="msg-wrap"><p class="msg"></p></div>
+            <button type="button" class="voice-pill" hidden aria-label="Écouter le message vocal">
+              <span class="vp-ico" aria-hidden="true">▶</span><span class="vp-label">Message vocal</span><span class="vp-bar" aria-hidden="true"><i></i></span>
+            </button>
             <p class="sign"><span class="sign-name"></span>
               <svg class="flourish" viewBox="0 0 120 20" aria-hidden="true"><path d="M4 14 C 30 2, 50 22, 74 10 S 110 6, 116 12"/></svg>
             </p>
@@ -338,11 +364,48 @@
         </div>
       </div>`;
     const q = s => host.querySelector(s);
-    return {
+    const refs = {
       host, book: q('.book'), greet: q('.greet'), msg: q('.msg'), msgWrap: q('.msg-wrap'),
       sign: q('.sign'), signName: q('.sign-name'), decor: q('.decor-slot'), decorKind: null,
       frame: q('.inside-frame'), polaroid: q('.polaroid'), photo: q('.polaroid img'),
+      voicePill: q('.voice-pill'), voiceSrc: '', audio: null,
     };
+    setupVoice(refs);
+    return refs;
+  }
+
+  /* Lecture du message vocal dans la carte */
+  function setupVoice(refs) {
+    const pill = refs.voicePill, ico = pill.querySelector('.vp-ico'), bar = pill.querySelector('.vp-bar i');
+    const sync = () => {
+      const a = refs.audio, playing = !!a && !a.paused && !a.ended;
+      pill.classList.toggle('playing', playing);
+      ico.textContent = playing ? '❚❚' : '▶';
+      pill.setAttribute('aria-label', playing ? 'Mettre en pause le message vocal' : 'Écouter le message vocal');
+      Music.duck(playing);
+    };
+    refs.playVoice = () => {
+      if (!refs.voiceSrc) return;
+      if (!refs.audio || refs.audio.dataset.src !== refs.voiceSrc) {
+        if (refs.audio) refs.audio.pause();
+        const a = new Audio(refs.voiceSrc);
+        a.dataset.src = refs.voiceSrc;
+        a.addEventListener('play', sync);
+        a.addEventListener('pause', sync);
+        a.addEventListener('ended', () => { bar.style.width = '100%'; sync(); });
+        a.addEventListener('timeupdate', () => {
+          if (isFinite(a.duration) && a.duration > 0) bar.style.width = (a.currentTime / a.duration * 100).toFixed(1) + '%';
+        });
+        refs.audio = a;
+      }
+      if (refs.audio.ended) refs.audio.currentTime = 0;
+      refs.audio.play().catch(() => sync());
+    };
+    refs.stopVoice = () => { if (refs.audio) refs.audio.pause(); };
+    pill.addEventListener('click', e => {
+      e.stopPropagation();
+      if (refs.audio && !refs.audio.paused) refs.stopVoice(); else refs.playVoice();
+    });
   }
 
   function fillBook(refs, d) {
@@ -354,6 +417,16 @@
     refs.frame.classList.toggle('has-photo', !!ph);
     if (ph && refs.photo.getAttribute('src') !== ph) refs.photo.src = ph;
     if (!ph) refs.photo.removeAttribute('src');
+    const voice = d.voice || '';
+    if (voice !== refs.voiceSrc) {
+      if (refs.audio) refs.audio.pause();
+      refs.audio = null;
+      refs.voicePill.querySelector('.vp-bar i').style.width = '0';
+      refs.voicePill.classList.remove('playing');
+      refs.voicePill.querySelector('.vp-ico').textContent = '▶';
+    }
+    refs.voiceSrc = voice;
+    refs.voicePill.hidden = !voice;
     if (refs.decorKind !== d.d) {
       refs.decor.innerHTML = decorSVG(d.d);
       refs.decorKind = d.d;
@@ -818,7 +891,12 @@
       src.start(t); src.stop(t + .55);
     }
 
-    return { start, stop, chime, whoosh, pop, get playing() { return playing; } };
+    function duck(on) {
+      if (!ctx || !master) return;
+      master.gain.setTargetAtTime(on ? .1 : .5, ctx.currentTime, .25);
+    }
+
+    return { start, stop, chime, whoosh, pop, duck, get playing() { return playing; } };
   })();
 
   /* ------------------------------------------------------------
@@ -855,6 +933,27 @@
      ------------------------------------------------------------ */
   let previewData = null;
 
+  const fmtWhen = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  const fmtDay = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
+  const rtf = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+  function ago(date) {
+    const sec = (new Date(date).getTime() - Date.now()) / 1000, a = Math.abs(sec);
+    if (a < 60) return 'à l’instant';
+    if (a < 3600) return rtf.format(Math.round(sec / 60), 'minute');
+    if (a < 86400) return rtf.format(Math.round(sec / 3600), 'hour');
+    if (a < 86400 * 7) return rtf.format(Math.round(sec / 86400), 'day');
+    return 'le ' + fmtDay.format(new Date(date));
+  }
+  const pad = n => String(n).padStart(2, '0');
+  const toLocalInput = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  /* Prochain 24 ou 25 décembre (heure locale) */
+  function nextXmas(day, hour) {
+    const now = new Date();
+    let d = new Date(now.getFullYear(), 11, day, hour, 0);
+    if (d <= now) d = new Date(now.getFullYear() + 1, 11, day, hour, 0);
+    return d;
+  }
+
   const Creator = (() => {
     const fTo = $('#f-to'), fMsg = $('#f-msg'), fFrom = $('#f-from');
     const count = $('#count');
@@ -875,6 +974,141 @@
       </label>`).join('');
 
     $('#photo-field').hidden = !API.enabled;
+    $('#options-field').hidden = !API.enabled;
+
+    /* --- option : date d'ouverture --- */
+    const optLock = $('#opt-lock'), fUnlock = $('#f-unlock'), unlockHint = $('#unlock-hint');
+    function unlockDate() {
+      if (!optLock.checked || !fUnlock.value) return null;
+      const d = new Date(fUnlock.value);
+      return isNaN(d) ? null : d;
+    }
+    function syncLock() {
+      $('#lock-body').hidden = !optLock.checked;
+      fUnlock.min = toLocalInput(new Date());
+      if (optLock.checked && !fUnlock.value) fUnlock.value = toLocalInput(nextXmas(24, 19));
+      const d = unlockDate();
+      unlockHint.textContent = !optLock.checked ? ''
+        : !d ? 'Choisis une date et une heure.'
+        : d <= new Date() ? '⚠️ Cette date est déjà passée.'
+        : `La carte s'ouvrira le ${fmtWhen.format(d)}.`;
+    }
+    optLock.addEventListener('change', syncLock);
+    fUnlock.addEventListener('input', syncLock);
+    document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+      fUnlock.value = toLocalInput(b.dataset.preset === 'eve' ? nextXmas(24, 19) : nextXmas(25, 0));
+      syncLock();
+    }));
+
+    /* --- option : message vocal --- */
+    const optVoice = $('#opt-voice'), recBtn = $('#rec-btn'), recLabel = $('#rec-label'), recTime = $('#rec-time');
+    const recErr = $('#rec-err'), recAudio = $('#rec-audio');
+    const MAX_REC = 60;
+    let recorder = null, recTimer = 0, recStart = 0, voice = null;
+    const fmtSec = n => `${Math.floor(n / 60)}:${pad(Math.floor(n % 60))}`;
+    function recError(msg) { recErr.textContent = msg; recErr.hidden = !msg; }
+    function setRecUI(on) {
+      recBtn.classList.toggle('on', on);
+      recLabel.textContent = on ? 'Arrêter' : 'Enregistrer';
+      if (!on) recTime.textContent = `0:00 / ${fmtSec(MAX_REC)}`;
+    }
+    function showVoice() {
+      $('#rec-done').hidden = !voice;
+      $('.rec').hidden = !!voice;
+      if (voice) recAudio.src = voice.url; else recAudio.removeAttribute('src');
+    }
+    async function startRec() {
+      recError('');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        recError("Ton navigateur ne permet pas d'enregistrer. Essaie avec Chrome, Safari ou Firefox à jour.");
+        return;
+      }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch {
+        recError("Le micro n'est pas autorisé. Autorise-le dans ton navigateur puis réessaie.");
+        return;
+      }
+      const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
+      const mime = types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+      const chunks = [];
+      recorder = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 48000 } : {});
+      recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const raw = (recorder.mimeType || (chunks[0] && chunks[0].type) || 'audio/webm').split(';')[0];
+        const type = raw.includes('mp4') || raw.includes('m4a') ? 'audio/mp4' : raw.includes('ogg') ? 'audio/ogg' : 'audio/webm';
+        const blob = new Blob(chunks, { type });
+        recorder = null;
+        setRecUI(false);
+        if (blob.size < 2000) { recError("L'enregistrement est trop court, réessaie."); return; }
+        if (blob.size > 3e6) { recError("L'enregistrement est trop lourd, essaie plus court."); return; }
+        voice = { blob, type, ext: type === 'audio/mp4' ? 'm4a' : type === 'audio/ogg' ? 'ogg' : 'webm', url: URL.createObjectURL(blob) };
+        showVoice();
+        updatePreview();
+        refs.book.classList.add('open');
+      };
+      recorder.start(250);
+      recStart = Date.now();
+      setRecUI(true);
+      recTimer = setInterval(() => {
+        const t = (Date.now() - recStart) / 1000;
+        recTime.textContent = `${fmtSec(t)} / ${fmtSec(MAX_REC)}`;
+        if (t >= MAX_REC) stopRec();
+      }, 200);
+    }
+    function stopRec() {
+      clearInterval(recTimer);
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+    }
+    recBtn.addEventListener('click', () => { if (recorder) stopRec(); else startRec(); });
+    $('#rec-delete').addEventListener('click', () => {
+      if (voice) URL.revokeObjectURL(voice.url);
+      voice = null;
+      recAudio.pause();
+      showVoice();
+      updatePreview();
+    });
+    optVoice.addEventListener('change', () => {
+      $('#voice-body').hidden = !optVoice.checked;
+      if (!optVoice.checked) stopRec();
+      updatePreview();
+    });
+
+    /* --- cartes envoyées depuis ce navigateur --- */
+    function renderSent() {
+      const list = API.mine.list().filter(x => x.token).reverse();
+      $('#sent').hidden = !API.enabled || !list.length;
+      $('#sent-list').replaceChildren(...list.map(x => {
+        const li = document.createElement('li');
+        const info = document.createElement('div');
+        const who = document.createElement('div');
+        who.className = 'who';
+        who.textContent = 'Pour ' + (x.to || 'quelqu’un');
+        const when = document.createElement('div');
+        when.className = 'when';
+        when.textContent = 'Créée ' + ago(x.at) + (x.unlock && new Date(x.unlock) > new Date() ? ` · 🔒 s'ouvre le ${fmtDay.format(new Date(x.unlock))}` : '');
+        info.append(who, when);
+        const acts = document.createElement('div');
+        acts.className = 'acts';
+        const follow = document.createElement('a');
+        follow.className = 'btn ghost sm';
+        follow.href = '#suivi=' + encodeURIComponent(x.token);
+        follow.textContent = 'Voir le suivi';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'btn ghost sm';
+        copy.textContent = 'Copier le lien';
+        copy.addEventListener('click', async () => {
+          const link = siteBase() + '#k=' + x.id;
+          try { await navigator.clipboard.writeText(link); toast('Lien copié 💌'); } catch { prompt('Lien de la carte :', link); }
+        });
+        acts.append(follow, copy);
+        li.append(info, acts);
+        return li;
+      }));
+    }
 
     function syncForm() {
       fTo.value = state.to;
@@ -885,7 +1119,7 @@
       count.textContent = [...state.m].length;
     }
 
-    const current = () => ({ ...state, ph: photoUrl });
+    const current = () => ({ ...state, ph: photoUrl, voice: optVoice.checked && voice ? voice.url : '' });
 
     function updatePreview() {
       if (!refs) refs = buildBook($('#preview-card .tilt'));
@@ -1009,13 +1243,25 @@
         celebrate();
         return;
       }
+      if (recorder) { toast("Termine d'abord l'enregistrement 🎙️"); return; }
+      const unlockAt = unlockDate();
+      if (optLock.checked && (!unlockAt || unlockAt <= new Date())) {
+        toast("Choisis une date d'ouverture dans le futur 📅");
+        fUnlock.focus();
+        return;
+      }
+      const sendVoice = optVoice.checked && voice ? voice : null;
       const btn = $('#create'), label = btn.textContent;
       busy = true;
       btn.disabled = true;
-      btn.textContent = photoBlob ? 'Envoi de la photo…' : 'Création…';
+      btn.textContent = photoBlob || sendVoice ? 'Envoi en cours…' : 'Création…';
       try {
-        const id = await API.createCard(state, photoBlob);
-        Share.open(siteBase() + '#k=' + id, state);
+        const res = await API.createCard(state, { photo: photoBlob, voice: sendVoice, unlockAt: optLock.checked ? unlockAt : null });
+        Share.open(siteBase() + '#k=' + res.id, state, {
+          follow: siteBase() + '#suivi=' + res.token,
+          unlockAt: optLock.checked ? unlockAt : null,
+        });
+        renderSent();
         celebrate();
       } catch {
         toast("Oups, la carte n'a pas pu être créée. Vérifie ta connexion et réessaie.");
@@ -1031,6 +1277,9 @@
         setTheme(state.th);
         syncForm();
         showPhotoUI();
+        showVoice();
+        syncLock();
+        renderSent();
         updatePreview();
         document.title = 'Crée ta carte de Noël ✨';
       },
@@ -1044,8 +1293,12 @@
     const modal = $('#modal'), input = $('#share-link');
     let lastFocus = null, url = '';
 
-    function open(link, d) {
+    function open(link, d, extra = {}) {
       url = link;
+      $('#follow-box').hidden = !extra.follow;
+      if (extra.follow) $('#follow-link').href = extra.follow;
+      $('#lock-note').hidden = !extra.unlockAt;
+      if (extra.unlockAt) $('#lock-note').textContent = `🔒 Elle ne pourra être ouverte qu'à partir du ${fmtWhen.format(extra.unlockAt)}.`;
       const text = d.to ? `${d.to}, j'ai une carte de Noël pour toi ✨` : "J'ai une carte de Noël pour toi ✨";
       input.value = url;
       $('#wa-share').href = 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url);
@@ -1090,11 +1343,11 @@
   const Viewer = (() => {
     const envWrap = $('#env-wrap'), env = $('#envelope'), card = $('#viewer-card');
     const tilt = $('#viewer-card .tilt'), glow = $('#card-glow');
-    const endActions = $('#end-actions'), soundBtn = $('#sound-btn');
+    const endActions = $('#end-actions'), soundBtn = $('#sound-btn'), replyBtn = $('#reply-btn');
     const cine = $('#cine'), gateBox = $('#cine-gate'), gateTitle = $('#gate-title');
     const gateBtn = $('#gate-btn'), gateNote = $('#gate-note'), sleigh = $('#sleigh');
     let data = null, opts = {}, refs = null, timers = [], opened = false, typing = null, spread = false;
-    let cineTimers = [], sleighRAF = 0, gateMode = 'ready', started = false;
+    let cineTimers = [], sleighRAF = 0, gateMode = 'ready', started = false, cdTimer = 0;
     let soundOn = true; // son activé par défaut
 
     const later = (fn, ms) => timers.push(setTimeout(fn, reduceMotion ? ms * .25 : ms));
@@ -1136,6 +1389,7 @@
 
     function resetScene() {
       clear();
+      if (refs && refs.stopVoice) refs.stopVoice();
       opened = false;
       envWrap.className = 'env-wrap waiting';
       env.className = 'envelope';
@@ -1158,21 +1412,49 @@
       document.title = d.to ? `Une carte pour ${d.to} 🎄` : 'Une carte de Noël pour toi 🎄';
     }
 
+    /* Compte à rebours d'une carte verrouillée */
+    function runCountdown() {
+      clearInterval(cdTimer);
+      const tick = () => {
+        const left = Math.max(0, data.unlockAt - Date.now());
+        const sec = Math.floor(left / 1000);
+        $('#cd-d').textContent = Math.floor(sec / 86400);
+        $('#cd-h').textContent = pad(Math.floor(sec / 3600) % 24);
+        $('#cd-m').textContent = pad(Math.floor(sec / 60) % 60);
+        $('#cd-s').textContent = pad(sec % 60);
+        if (left <= 0) {
+          clearInterval(cdTimer);
+          gateTitle.textContent = "C'est l'heure ! ✨";
+          setTimeout(route, 1500);
+        }
+      };
+      tick();
+      cdTimer = setInterval(tick, 1000);
+    }
+
     function gate(mode) {
       gateMode = mode;
       cineClear();
+      clearInterval(cdTimer);
       cine.hidden = false;
-      cine.className = 'cine gate';
+      cine.className = mode === 'locked' ? 'cine gate locked' : 'cine gate';
+      $('#countdown').hidden = mode !== 'locked';
+      $('#gate-sub').hidden = mode !== 'locked';
       envWrap.classList.add('waiting');
       camUp();
       gateBox.classList.toggle('gate-loading', mode === 'loading');
       gateTitle.textContent =
         mode === 'loading' ? 'Chargement de ta carte…'
         : mode === 'error' ? "La carte n'a pas pu être chargée"
+        : mode === 'locked' ? (data.to ? `${data.to}, ta carte arrive bientôt` : 'Ta carte arrive bientôt')
         : (data && data.to ? `${data.to}, une surprise t'attend` : "Une surprise t'attend");
+      if (mode === 'locked') {
+        $('#gate-sub').textContent = `Elle s'ouvrira le ${fmtWhen.format(data.unlockAt)}` + (data.f ? `, de la part de ${data.f}.` : '.');
+        runCountdown();
+      }
       gateBtn.textContent = mode === 'error' ? 'Réessayer' : 'Ouvrir ✨';
       gateNote.hidden = mode !== 'ready';
-      if (mode !== 'loading') gateBtn.focus({ preventScroll: true });
+      if (mode !== 'loading' && mode !== 'locked') gateBtn.focus({ preventScroll: true });
     }
 
     function flySleigh() {
@@ -1270,6 +1552,7 @@
           Sky.burst(cx + r.width * .8, cy, 30, { power: 6 });
         }
         if (data.ph) refs.polaroid.classList.add('show');
+        if (data.voice && soundOn) later(() => refs.playVoice(), 700);
         startTyping();
       }, 4100);
     }
@@ -1288,6 +1571,7 @@
       typing = typeWriter(refs.msg, text, () => {
         refs.sign.classList.add('show');
         later(() => {
+          replyBtn.hidden = !(API.enabled && opts.id);
           endActions.classList.add('show');
           Sky.rain(60);
           finale();
@@ -1315,10 +1599,11 @@
     attachTilt($('#viewer'), tilt, 9);
     soundBtn.addEventListener('click', () => {
       soundOn = !soundOn;
-      if (!soundOn) Music.stop();
+      if (!soundOn) { Music.stop(); if (refs && refs.stopVoice) refs.stopVoice(); }
       else if (started) Music.start();
       updateSoundIcon();
     });
+    replyBtn.addEventListener('click', () => Reply.open(data, opts.id));
     $('#replay').addEventListener('click', () => {
       setup(data, { ...opts, track: false });
       runCinematic();
@@ -1333,9 +1618,11 @@
     return {
       loading() { data = null; resetScene(); Music.stop(); gate('loading'); },
       error() { gate('error'); },
-      show(d, o) { setup(d, o); Music.stop(); started = false; gate('ready'); },
+      show(d, o) { setup(d, o); Music.stop(); started = false; gate(d.locked ? 'locked' : 'ready'); },
       stop() {
         clear();
+        clearInterval(cdTimer);
+        if (refs && refs.stopVoice) refs.stopVoice();
         cineClear();
         Music.stop();
         cine.hidden = true;
@@ -1345,11 +1632,183 @@
   })();
 
   /* ------------------------------------------------------------
+     Réponse du destinataire
+     ------------------------------------------------------------ */
+  const Reply = (() => {
+    const modal = $('#reply-modal'), form = $('#reply-form'), box = $('#reactions');
+    const msg = $('#reply-msg'), author = $('#reply-author'), send = $('#reply-send');
+    const REACTIONS = ['❤️', '🥰', '😭', '😂', '🎄', '🙏'];
+    let cardId = null, reaction = null, busy = false, lastFocus = null, sender = '';
+
+    box.replaceChildren(...REACTIONS.map(e => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = e;
+      b.setAttribute('aria-pressed', 'false');
+      b.setAttribute('aria-label', 'Réaction ' + e);
+      b.addEventListener('click', () => {
+        reaction = reaction === e ? null : e;
+        box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.textContent === reaction)));
+        if (reaction) { const [x, y] = centerOf(b); Sky.burst(x, y, 14, { power: 3, lift: 1.5 }); }
+      });
+      return b;
+    }));
+
+    function open(d, id) {
+      cardId = id;
+      sender = d.f || '';
+      reaction = null;
+      box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', 'false'));
+      msg.value = '';
+      author.value = d.to || '';
+      $('#reply-title').textContent = sender ? `Répondre à ${sender}` : 'Répondre';
+      $('#reply-step').hidden = false;
+      $('#reply-done').hidden = true;
+      lastFocus = document.activeElement;
+      modal.hidden = false;
+      box.querySelector('button').focus();
+    }
+    function close() {
+      if (modal.hidden) return;
+      modal.hidden = true;
+      if (lastFocus) lastFocus.focus();
+    }
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (busy) return;
+      if (!reaction && !msg.value.trim()) { toast('Choisis une réaction ou écris un petit mot 💌'); return; }
+      busy = true;
+      send.disabled = true;
+      send.textContent = 'Envoi…';
+      try {
+        await API.addReply(cardId, reaction, msg.value.trim(), author.value.trim());
+        $('#reply-step').hidden = true;
+        $('#reply-done').hidden = false;
+        $('#reply-done-title').textContent = sender ? `${sender} va recevoir ta réponse !` : 'Réponse envoyée !';
+        $('#reply-ok').focus();
+        const [W, H] = Sky.size();
+        Sky.burst(W / 2, H * .4, 90, { power: 9 });
+        Music.chime();
+        $('#reply-btn').textContent = '💌 Répondre encore';
+      } catch {
+        toast("La réponse n'a pas pu être envoyée. Réessaie dans un instant.");
+      } finally {
+        busy = false;
+        send.disabled = false;
+        send.textContent = 'Envoyer ma réponse';
+      }
+    });
+    $('#reply-close').addEventListener('click', close);
+    $('#reply-ok').addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+    addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+    return { open, close };
+  })();
+
+  /* ------------------------------------------------------------
+     Page de suivi de l'expéditeur
+     ------------------------------------------------------------ */
+  const Followup = (() => {
+    const sec = $('#followup');
+    let token = '', timer = 0;
+
+    function stat(value, label) {
+      const d = document.createElement('div');
+      d.className = 'fu-stat';
+      const b = document.createElement('b');
+      b.textContent = value;
+      const sp = document.createElement('span');
+      sp.textContent = label;
+      d.append(b, sp);
+      return d;
+    }
+
+    function render(f) {
+      setTheme(THEMES[f.theme] ? f.theme : 'nuit');
+      $('#fu-title').textContent = f.recipient ? `Ta carte pour ${f.recipient}` : 'Ta carte';
+      $('#fu-sub').textContent = `Créée ${ago(f.created_at)}` + (f.sender ? `, signée ${f.sender}` : '');
+      const locked = f.unlock_at && new Date(f.unlock_at) > new Date();
+      const stats = [
+        stat(f.opens > 0 ? `${f.opens} fois` : 'Pas encore', 'ouverte'),
+        stat(f.last_opened_at ? ago(f.last_opened_at) : '—', 'dernière ouverture'),
+        stat(String(f.replies.length), f.replies.length > 1 ? 'réponses' : 'réponse'),
+      ];
+      if (locked) stats.push(stat('🔒 ' + fmtDay.format(new Date(f.unlock_at)), 'date d’ouverture'));
+      $('#fu-stats').replaceChildren(...stats);
+      const list = $('#fu-replies');
+      if (!f.replies.length) {
+        const li = document.createElement('li');
+        li.className = 'fu-empty';
+        li.textContent = locked ? 'La carte n’est pas encore ouverte. Les réponses arriveront ici ✨' : 'Pas encore de réponse. Reviens un peu plus tard ✨';
+        list.replaceChildren(li);
+      } else {
+        list.replaceChildren(...f.replies.map((x, i) => {
+          const li = document.createElement('li');
+          li.style.animationDelay = (i * .06) + 's';
+          const em = document.createElement('span');
+          em.className = 'r-emoji';
+          em.textContent = x.reaction || '💬';
+          const m = document.createElement('div');
+          m.className = 'r-msg';
+          m.textContent = x.message || 'a réagi à ta carte';
+          const meta = document.createElement('div');
+          meta.className = 'r-meta';
+          meta.textContent = `${x.author || 'Anonyme'} · ${ago(x.created_at)}`;
+          li.append(em, m, meta);
+          return li;
+        }));
+      }
+      $('#fu-open').href = `#k=${encodeURIComponent(f.id)}&notrack`;
+      $('#fu-open').hidden = false;
+      document.title = f.recipient ? `Suivi · carte pour ${f.recipient}` : 'Suivi de ta carte';
+    }
+
+    async function load(showErrors) {
+      try {
+        const f = await API.getFollowup(token);
+        if (!f) {
+          $('#fu-title').textContent = 'Lien de suivi introuvable';
+          $('#fu-sub').textContent = 'Vérifie que le lien est complet.';
+          $('#fu-stats').replaceChildren();
+          $('#fu-replies').replaceChildren();
+          $('#fu-open').hidden = true;
+          return;
+        }
+        render(f);
+      } catch {
+        if (showErrors) toast('Impossible de charger le suivi. Vérifie ta connexion.');
+      }
+    }
+
+    $('#fu-refresh').addEventListener('click', () => load(true));
+
+    return {
+      show(t) {
+        token = t;
+        sec.hidden = false;
+        scrollTo(0, 0);
+        $('#fu-title').textContent = 'Chargement…';
+        $('#fu-sub').textContent = '';
+        $('#fu-stats').replaceChildren();
+        $('#fu-replies').replaceChildren();
+        load(true);
+        clearInterval(timer);
+        timer = setInterval(() => { if (!document.hidden) load(false); }, 30000);
+      },
+      hide() { sec.hidden = true; clearInterval(timer); },
+    };
+  })();
+
+  /* ------------------------------------------------------------
      Navigation
      ------------------------------------------------------------ */
   function parseHash() {
     const h = location.hash;
-    let m = h.match(/[#&]k=([A-Za-z0-9_-]{6,32})/);
+    let m = h.match(/[#&]suivi=([A-Za-z0-9_-]{20,64})/);
+    if (m) return { kind: 'followup', token: m[1] };
+    m = h.match(/[#&]k=([A-Za-z0-9_-]{6,32})/);
     if (m) return { kind: 'remote', id: m[1], notrack: /[#&]notrack\b/.test(h) };
     if (/^#apercu\b/.test(h)) return previewData ? { kind: 'local', data: previewData, preview: true } : null;
     m = h.match(/[#&]c=([^&]+)/);
@@ -1361,6 +1820,8 @@
 
   function showViewer(theme) {
     Share.close();
+    Reply.close();
+    Followup.hide();
     $('#creator').hidden = true;
     $('#viewer').hidden = false;
     document.body.classList.add('v-mode');
@@ -1372,6 +1833,8 @@
   let visitLogged = false;
   function showCreator() {
     Viewer.stop();
+    Reply.close();
+    Followup.hide();
     $('#viewer').hidden = true;
     $('#creator').hidden = false;
     document.body.classList.remove('v-mode');
@@ -1384,6 +1847,17 @@
   async function route() {
     const seq = ++routeSeq;
     const r = parseHash();
+    if (r && r.kind === 'followup') {
+      Share.close();
+      Viewer.stop();
+      $('#creator').hidden = true;
+      $('#viewer').hidden = true;
+      document.body.classList.remove('v-mode');
+      Sky.setNear(false);
+      if (!API.enabled) { showCreator(); return; }
+      Followup.show(r.token);
+      return;
+    }
     if (r && r.kind === 'remote') {
       showViewer(null);
       Viewer.loading();

@@ -811,3 +811,158 @@ body.no-trans .moon, body.no-trans .mountains, body.no-trans .hills { transition
   .viewer .polaroid { opacity: 1; transform: rotate(-3deg); }
   .viewer .polaroid img { filter: none; }
 }
+
+/* ============================================================
+   OPTIONS (date d'ouverture, message vocal)
+   ============================================================ */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#options-field { display: grid; gap: 10px; }
+.opt-card {
+  border: 1px solid rgba(255, 255, 255, .12); border-radius: 16px; background: rgba(0, 0, 0, .16);
+  transition: border-color .2s, background .2s;
+}
+.opt-card:has(.opt-head input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 8%, rgba(0, 0, 0, .16)); }
+.opt-head { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
+.opt-head input { position: absolute; opacity: 0; pointer-events: none; }
+.opt-box {
+  flex: none; width: 24px; height: 24px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, .35);
+  display: grid; place-items: center; transition: background .2s, border-color .2s;
+}
+.opt-box::after { content: "✓"; font-size: .85rem; font-weight: 700; color: var(--btn-ink); opacity: 0; transform: scale(.4); transition: .25s var(--ease-spring); }
+.opt-head input:checked + .opt-box { background: var(--accent); border-color: var(--accent); }
+.opt-head input:checked + .opt-box::after { opacity: 1; transform: none; }
+.opt-head input:focus-visible + .opt-box { outline: 2px solid #fff; outline-offset: 3px; }
+.opt-text b { display: block; font-weight: 500; }
+.opt-text small { display: block; color: rgba(255, 255, 255, .55); font-size: .82rem; margin-top: 2px; }
+.opt-body { padding: 0 16px 16px; display: grid; gap: 10px; animation: rise .4s var(--ease-out); }
+.opt-hint { margin: 0; font-size: .85rem; color: rgba(255, 255, 255, .7); }
+.rec-err { color: #ff9aa8; }
+input[type=datetime-local] {
+  font: inherit; color: #fff; background: rgba(0, 0, 0, .2); border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 12px; padding: 11px 13px; color-scheme: dark; width: 100%;
+}
+input[type=datetime-local]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  font-size: .85rem; color: var(--accent); cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 99px; padding: 6px 13px; transition: transform .2s var(--ease-spring), background .2s;
+}
+.chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); transform: translateY(-1px); }
+.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+.rec { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.rec-btn {
+  display: inline-flex; align-items: center; gap: 10px; cursor: pointer; color: #fff; font-weight: 500;
+  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .22); border-radius: 99px; padding: 10px 18px;
+  transition: background .2s, transform .2s var(--ease-spring);
+}
+.rec-btn:hover { background: rgba(255, 255, 255, .14); }
+.rec-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: #ff4d6d; box-shadow: 0 0 0 0 rgba(255, 77, 109, .6); }
+.rec-btn.on { background: rgba(255, 77, 109, .18); border-color: #ff4d6d; }
+.rec-btn.on .rec-dot { border-radius: 3px; animation: recPulse 1.2s ease-out infinite; }
+@keyframes recPulse { 0% { box-shadow: 0 0 0 0 rgba(255, 77, 109, .6); } 100% { box-shadow: 0 0 0 12px rgba(255, 77, 109, 0); } }
+.rec-time { font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, .7); font-size: .9rem; }
+.rec-done { display: grid; gap: 8px; }
+.rec-done audio { width: 100%; height: 40px; }
+
+/* Cartes envoyées */
+.sent { margin-top: clamp(20px, 3vw, 40px); padding: clamp(18px, 3vw, 28px); animation: rise 1s var(--ease-out) both; }
+.sent h2 { font-family: var(--serif); font-size: 1.6rem; margin: 0; }
+.sent-hint { color: rgba(255, 255, 255, .6); margin: 4px 0 14px; font-size: .9rem; }
+.sent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sent-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: 14px; background: rgba(0, 0, 0, .18); border: 1px solid rgba(255, 255, 255, .08);
+}
+.sent-list .who { font-weight: 500; }
+.sent-list .when { color: rgba(255, 255, 255, .55); font-size: .85rem; }
+.sent-list .acts { display: flex; gap: 8px; }
+
+/* Modale : suivi et verrou */
+.follow-box {
+  margin-top: 18px; padding: 14px; border-radius: 14px; text-align: left;
+  background: color-mix(in srgb, var(--accent) 10%, rgba(0, 0, 0, .2));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.follow-box p { margin: 0 0 10px !important; font-size: .9rem; }
+.lock-note { margin: 12px 0 0 !important; font-size: .9rem; color: var(--accent2) !important; }
+
+/* ============================================================
+   COMPTE À REBOURS (carte verrouillée)
+   ============================================================ */
+.countdown { display: flex; gap: clamp(8px, 2.5vw, 18px); justify-content: center; }
+.countdown div {
+  display: grid; justify-items: center; gap: 4px; min-width: clamp(62px, 17vw, 92px); padding: 14px 6px 10px;
+  border-radius: 16px; background: rgba(255, 255, 255, .06); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.countdown b { font-family: var(--serif); font-size: clamp(2rem, 7vw, 3.2rem); line-height: 1; color: var(--accent2); font-variant-numeric: tabular-nums; }
+.countdown span { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .6); }
+.gate-sub { margin: 0; color: rgba(255, 255, 255, .78); font-family: var(--serif); font-style: italic; font-size: 1.2rem; max-width: 30em; }
+.cine.locked .gate-btn { display: none; }
+
+/* ============================================================
+   MESSAGE VOCAL DANS LA CARTE
+   ============================================================ */
+.voice-pill {
+  flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 8px;
+  margin: 4% 0 0; padding: 5px 12px 5px 6px; border-radius: 99px; cursor: pointer;
+  font: 500 calc(var(--w) * .038) var(--ui); color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 18%, #fff); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.voice-pill .vp-ico {
+  width: 1.9em; height: 1.9em; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; font-size: .8em;
+}
+.voice-pill .vp-bar { width: calc(var(--w) * .16); height: 4px; border-radius: 99px; background: rgba(0, 0, 0, .1); overflow: hidden; }
+.voice-pill .vp-bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.voice-pill.playing .vp-ico { animation: vpPulse 1s ease-in-out infinite; }
+@keyframes vpPulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent); } }
+.voice-pill:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ============================================================
+   RÉPONSE
+   ============================================================ */
+.reply-card { display: block; }
+.reply-card textarea, .reply-card input[type=text] { margin-top: 12px; }
+.reply-card .btn.primary { width: 100%; margin-top: 14px; }
+.reactions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.reactions button {
+  font-size: 1.7rem; padding: 10px 0; border-radius: 14px; cursor: pointer;
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14);
+  transition: transform .25s var(--ease-spring), background .2s, border-color .2s;
+}
+.reactions button:hover { transform: translateY(-3px) scale(1.06); }
+.reactions button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); transform: scale(1.12); }
+.reactions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ============================================================
+   PAGE DE SUIVI
+   ============================================================ */
+.followup { position: relative; z-index: 3; min-height: 100vh; min-height: 100svh; padding: clamp(28px, 6vw, 64px) 16px 160px; }
+.follow-wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 22px; justify-items: center; text-align: center; }
+.follow-wrap .brand { text-decoration: none; }
+.follow-title { margin: 0; font-family: var(--script); font-weight: 400; font-size: clamp(2.6rem, 9vw, 4.2rem); line-height: 1.1; color: var(--accent); }
+.follow-sub { margin: -10px 0 0; color: rgba(255, 255, 255, .7); }
+.fu-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; width: 100%; }
+.fu-stat { padding: 16px; border-radius: 16px; background: rgba(0, 0, 0, .25); border: 1px solid rgba(255, 255, 255, .1); }
+.fu-stat b { display: block; font-size: 1.7rem; font-weight: 600; }
+.fu-stat span { color: rgba(255, 255, 255, .65); font-size: .85rem; }
+.fu-panel { width: 100%; padding: 20px; text-align: left; }
+.fu-panel h2 { margin: 0 0 12px; font-family: var(--serif); font-size: 1.5rem; }
+.fu-replies { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.fu-replies li {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: start;
+  padding: 14px; border-radius: 14px; background: rgba(0, 0, 0, .2); animation: rise .6s var(--ease-out) both;
+}
+.fu-replies .r-emoji { font-size: 2rem; line-height: 1; grid-row: span 2; }
+.fu-replies .r-msg { font-family: var(--serif); font-style: italic; font-size: 1.15rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fu-replies .r-meta { color: rgba(255, 255, 255, .55); font-size: .82rem; }
+.fu-empty { color: rgba(255, 255, 255, .6); text-align: center; padding: 18px 0; }
+.fu-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.fu-actions .btn { flex: 0 0 auto; }
+.field > .photo-drop { text-transform: none; letter-spacing: 0; font-size: 1rem; color: #fff; font-weight: 400; }
+.photo-empty b { font-weight: 500; }

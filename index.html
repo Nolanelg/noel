@@ -5,8 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Carte de Noël</title>
   <meta name="description" content="Crée et envoie une carte de vœux de Noël animée et personnalisée à tes proches.">
-  <meta property="og:title" content="Une carte de Noël pour toi 🎄">
-  <meta property="og:description" content="Ouvre l'enveloppe pour découvrir ton message…">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Atelier de Noël">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:title" content="Une carte de Noël t'attend 🎄">
+  <meta property="og:description" content="Quelqu'un a pensé à toi. Ouvre l'enveloppe pour découvrir ton message…">
+  <meta property="og:url" content="https://nolanelg.github.io/noel/">
+  <meta property="og:image" content="https://nolanelg.github.io/noel/og-image.jpg">
+  <meta property="og:image:secure_url" content="https://nolanelg.github.io/noel/og-image.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Une enveloppe scellée sous la neige et la pleine lune">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Une carte de Noël t'attend 🎄">
+  <meta name="twitter:description" content="Quelqu'un a pensé à toi. Ouvre l'enveloppe pour découvrir ton message…">
+  <meta name="twitter:image" content="https://nolanelg.github.io/noel/og-image.jpg">
   <meta name="theme-color" content="#060a1d">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -101,6 +115,44 @@
           <button type="button" class="link-btn" id="photo-remove" hidden>Retirer la photo</button>
         </div>
 
+        <fieldset class="field" id="options-field" hidden>
+          <legend>Options</legend>
+          <div class="opt-card">
+            <label class="opt-head">
+              <input type="checkbox" id="opt-lock">
+              <span class="opt-box" aria-hidden="true"></span>
+              <span class="opt-text"><b>🔒 Ouvrir à une date précise</b><small>Avant, on ne voit que l'enveloppe et un compte à rebours</small></span>
+            </label>
+            <div class="opt-body" id="lock-body" hidden>
+              <div class="chips">
+                <button type="button" class="chip" data-preset="eve">24 déc. · 19 h</button>
+                <button type="button" class="chip" data-preset="midnight">25 déc. · minuit</button>
+              </div>
+              <label class="sr-only" for="f-unlock">Date et heure d'ouverture</label>
+              <input type="datetime-local" id="f-unlock">
+              <p class="opt-hint" id="unlock-hint"></p>
+            </div>
+          </div>
+          <div class="opt-card">
+            <label class="opt-head">
+              <input type="checkbox" id="opt-voice">
+              <span class="opt-box" aria-hidden="true"></span>
+              <span class="opt-text"><b>🎙️ Message vocal</b><small>Il se lance quand la carte s'ouvre (1 minute maximum)</small></span>
+            </label>
+            <div class="opt-body" id="voice-body" hidden>
+              <div class="rec">
+                <button type="button" class="rec-btn" id="rec-btn"><span class="rec-dot" aria-hidden="true"></span><span id="rec-label">Enregistrer</span></button>
+                <span class="rec-time" id="rec-time">0:00 / 1:00</span>
+              </div>
+              <div class="rec-done" id="rec-done" hidden>
+                <audio id="rec-audio" controls preload="metadata"></audio>
+                <button type="button" class="link-btn" id="rec-delete">Supprimer et recommencer</button>
+              </div>
+              <p class="opt-hint rec-err" id="rec-err" hidden></p>
+            </div>
+          </div>
+        </fieldset>
+
         <fieldset class="field">
           <legend>Ambiance</legend>
           <div class="swatches" id="themes"></div>
@@ -124,6 +176,12 @@
         <p class="preview-hint">Clique sur la carte pour l'ouvrir ou la refermer</p>
       </div>
     </div>
+
+    <section class="panel sent" id="sent" hidden>
+      <h2>Tes cartes envoyées</h2>
+      <p class="sent-hint">Retrouve ici le suivi de chaque carte : quand elle a été ouverte et les réponses reçues.</p>
+      <ul class="sent-list" id="sent-list"></ul>
+    </section>
   </main>
 
   <!-- ============ LECTURE ============ -->
@@ -138,6 +196,13 @@
       <div class="cine-gate" id="cine-gate">
         <div class="gate-star" aria-hidden="true">✦</div>
         <p class="gate-title" id="gate-title">Une surprise t'attend</p>
+        <div class="countdown" id="countdown" hidden aria-live="off">
+          <div><b id="cd-d">0</b><span>jours</span></div>
+          <div><b id="cd-h">00</b><span>heures</span></div>
+          <div><b id="cd-m">00</b><span>minutes</span></div>
+          <div><b id="cd-s">00</b><span>secondes</span></div>
+        </div>
+        <p class="gate-sub" id="gate-sub" hidden></p>
         <button class="btn primary gate-btn" id="gate-btn" type="button">Ouvrir ✨</button>
         <p class="gate-note" id="gate-note">🔊 Monte le son pour la magie</p>
       </div>
@@ -177,10 +242,52 @@
     </div>
 
     <div class="end-actions" id="end-actions">
+      <button class="btn primary sm" id="reply-btn" type="button" hidden>💌 Répondre</button>
       <button class="btn ghost sm" id="replay" type="button">↺ Rejouer</button>
-      <a class="btn primary sm" id="make-own" href="./">Créer ma propre carte ✨</a>
+      <a class="btn ghost sm" id="make-own" href="./">Créer ma propre carte ✨</a>
     </div>
   </section>
+
+  <!-- ============ SUIVI DE L'EXPÉDITEUR ============ -->
+  <section id="followup" class="followup" hidden>
+    <div class="follow-wrap">
+      <a class="brand" href="./"><span class="brand-star">✦</span> Atelier de Noël <span class="brand-star">✦</span></a>
+      <h1 class="follow-title" id="fu-title">Suivi de ta carte</h1>
+      <p class="follow-sub" id="fu-sub"></p>
+      <div class="fu-stats" id="fu-stats"></div>
+      <div class="panel fu-panel">
+        <h2>Réponses</h2>
+        <ul class="fu-replies" id="fu-replies"></ul>
+      </div>
+      <div class="fu-actions">
+        <button class="btn ghost" type="button" id="fu-refresh">↻ Actualiser</button>
+        <a class="btn ghost" id="fu-open" target="_blank" rel="noopener">Revoir la carte</a>
+        <a class="btn primary" href="./" id="fu-new">Créer une autre carte ✨</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RÉPONSE DU DESTINATAIRE ============ -->
+  <div class="modal" id="reply-modal" hidden>
+    <form class="modal-card reply-card" id="reply-form" role="dialog" aria-modal="true" aria-labelledby="reply-title" novalidate>
+      <button class="modal-close" type="button" id="reply-close" aria-label="Fermer">×</button>
+      <div id="reply-step">
+        <div class="modal-icon">💌</div>
+        <h2 id="reply-title">Répondre</h2>
+        <p>Choisis une réaction et/ou écris un petit mot.</p>
+        <div class="reactions" id="reactions" role="group" aria-label="Réaction"></div>
+        <textarea id="reply-msg" maxlength="300" rows="3" placeholder="Merci, c'est trop mignon…"></textarea>
+        <input type="text" id="reply-author" maxlength="40" placeholder="Ton prénom" aria-label="Ton prénom">
+        <button class="btn primary" type="submit" id="reply-send">Envoyer ma réponse</button>
+      </div>
+      <div id="reply-done" hidden>
+        <div class="modal-icon">✨</div>
+        <h2 id="reply-done-title">Réponse envoyée !</h2>
+        <p>Ton petit mot est bien arrivé.</p>
+        <button class="btn ghost" type="button" id="reply-ok">Fermer</button>
+      </div>
+    </form>
+  </div>
 
   <!-- ============ PARTAGE ============ -->
   <div class="modal" id="modal" hidden>
@@ -193,11 +300,16 @@
         <input type="text" id="share-link" readonly aria-label="Lien de la carte">
         <button class="btn primary sm" id="copy-btn" type="button">Copier</button>
       </div>
+      <p class="lock-note" id="lock-note" hidden></p>
       <div class="share-row">
         <button class="btn ghost sm" id="native-share" type="button" hidden>Partager…</button>
         <a class="btn ghost sm" id="wa-share" target="_blank" rel="noopener">WhatsApp</a>
         <a class="btn ghost sm" id="mail-share">E-mail</a>
         <a class="btn ghost sm" id="open-card" target="_blank" rel="noopener">Voir la carte</a>
+      </div>
+      <div class="follow-box" id="follow-box" hidden>
+        <p><b>Ton lien de suivi</b>, rien que pour toi : tu y verras quand la carte est ouverte et les réponses reçues. Il est aussi enregistré en bas de l'atelier.</p>
+        <a class="btn ghost sm" id="follow-link" target="_blank" rel="noopener">Ouvrir mon suivi</a>
       </div>
     </div>
   </div>
