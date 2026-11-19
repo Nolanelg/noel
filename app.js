@@ -1,7 +1,8 @@
 /* ============================================================
    Carte de Noël — logique
-   Tout le contenu de la carte est encodé dans le lien (#c=…) :
-   aucun serveur, aucune base de données.
+   Avec Supabase configuré (config.js) : les cartes et leurs photos
+   sont enregistrées en ligne, le lien est court (#k=…) et les visites
+   sont comptées. Sans configuration, la carte est encodée dans le lien.
    ============================================================ */
 (() => {
   'use strict';
@@ -49,8 +50,131 @@
       d: DECORS[o.d] ? o.d : 'sapin',
     };
   }
+  const siteBase = () => location.href.split('#')[0];
   function cardLink(d) {
-    return location.href.split('#')[0] + '#c=' + encode(d);
+    return siteBase() + '#c=' + encode(d);
+  }
+
+  function randomId(len) {
+    const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const bytes = crypto.getRandomValues(new Uint8Array(len));
+    return Array.from(bytes, b => abc[b % abc.length]).join('');
+  }
+
+  /* ------------------------------------------------------------
+     Supabase (via son API REST, sans bibliothèque)
+     ------------------------------------------------------------ */
+  const API = (() => {
+    const cfg = window.NOEL_CONFIG || {};
+    const base = String(cfg.supabaseUrl || '').trim().replace(/\/+$/, '');
+    const key = String(cfg.supabaseAnonKey || '').trim();
+    const enabled = /^https:\/\/[^/]+$/.test(base) && key.length > 20;
+
+    function headers(extra = {}) {
+      const h = { apikey: key, ...extra };
+      if (key.startsWith('eyJ')) h.Authorization = 'Bearer ' + key;
+      return h;
+    }
+    async function rpc(fn, args) {
+      const res = await fetch(`${base}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(args),
+      });
+      if (!res.ok) throw new Error(`${fn} : ${res.status}`);
+      const txt = await res.text();
+      return txt ? JSON.parse(txt) : null;
+    }
+    async function uploadPhoto(blob) {
+      const name = randomId(20) + '.jpg';
+      const res = await fetch(`${base}/storage/v1/object/photos/${name}`, {
+        method: 'POST',
+        headers: headers({ 'Content-Type': 'image/jpeg', 'x-upsert': 'false' }),
+        body: blob,
+      });
+      if (!res.ok) throw new Error('photo : ' + res.status);
+      return name;
+    }
+    const photoUrl = path => (path && /^[A-Za-z0-9_-]{8,64}\.jpg$/.test(path))
+      ? `${base}/storage/v1/object/public/photos/${path}` : '';
+
+    const store = (k, fallback) => {
+      try {
+        let v = localStorage.getItem(k);
+        if (!v) { v = fallback(); localStorage.setItem(k, v); }
+        return v;
+      } catch { return fallback(); }
+    };
+    const visitorId = () => store('noel-visitor', () => randomId(16));
+    // Les cartes créées depuis ce navigateur : on ne compte pas leurs ouvertures
+    const mine = {
+      list() { try { return JSON.parse(localStorage.getItem('noel-mine') || '[]'); } catch { return []; } },
+      add(id) { try { localStorage.setItem('noel-mine', JSON.stringify([...this.list(), id].slice(-200))); } catch { /* ignoré */ } },
+      has(id) { return this.list().includes(id); },
+    };
+
+    function track(type, cardId = null, page = null) {
+      if (!enabled) return;
+      rpc('log_event', {
+        p_type: type, p_card_id: cardId, p_visitor_id: visitorId(), p_page: page,
+        p_referrer: (document.referrer || '').slice(0, 300) || null,
+        p_user_agent: navigator.userAgent.slice(0, 400),
+        p_lang: (navigator.language || '').slice(0, 20) || null,
+        p_screen: `${screen.width}x${screen.height}`,
+      }).catch(() => {});
+    }
+
+    async function createCard(d, photoBlob) {
+      const path = photoBlob ? await uploadPhoto(photoBlob) : null;
+      const id = await rpc('create_card', {
+        p_recipient: d.to, p_message: d.m, p_sender: d.f, p_theme: d.th, p_decor: d.d,
+        p_photo_path: path, p_visitor_id: visitorId(),
+      });
+      if (typeof id !== 'string') throw new Error('identifiant manquant');
+      mine.add(id);
+      return id;
+    }
+
+    async function getCard(id) {
+      const rows = await rpc('get_card', { p_id: id });
+      const c = Array.isArray(rows) ? rows[0] : null;
+      if (!c) return null;
+      const d = sanitize({ to: c.recipient, m: c.message, f: c.sender, th: c.theme, d: c.decor });
+      d.ph = photoUrl(c.photo_path);
+      return d;
+    }
+
+    return { enabled, track, createCard, getCard, mine };
+  })();
+
+  /* Réduit et compresse une photo en JPEG (1280 px max) */
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { resolve(img); setTimeout(() => URL.revokeObjectURL(url), 2000); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('format')); };
+      img.src = url;
+    });
+  }
+  async function compressImage(file) {
+    const img = await loadImage(file);
+    const max = 1280;
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    let q = .85, blob = null;
+    do {
+      blob = await new Promise(res => c.toBlob(res, 'image/jpeg', q));
+      q -= .1;
+    } while (blob && blob.size > 2.5e6 && q > .4);
+    if (!blob) throw new Error('compression');
+    return blob;
   }
 
   /* ------------------------------------------------------------
@@ -186,6 +310,7 @@
         <div class="page inside">
           <div class="inside-frame">
             ${HOLLY}
+            <figure class="polaroid" hidden><img alt="Photo jointe à la carte"></figure>
             <p class="greet"></p>
             <div class="msg-wrap"><p class="msg"></p></div>
             <p class="sign"><span class="sign-name"></span>
@@ -216,6 +341,7 @@
     return {
       host, book: q('.book'), greet: q('.greet'), msg: q('.msg'), msgWrap: q('.msg-wrap'),
       sign: q('.sign'), signName: q('.sign-name'), decor: q('.decor-slot'), decorKind: null,
+      frame: q('.inside-frame'), polaroid: q('.polaroid'), photo: q('.polaroid img'),
     };
   }
 
@@ -223,6 +349,11 @@
     refs.greet.textContent = d.to ? d.to + ',' : 'Coucou,';
     refs.signName.textContent = d.f;
     refs.sign.hidden = !d.f;
+    const ph = d.ph || '';
+    refs.polaroid.hidden = !ph;
+    refs.frame.classList.toggle('has-photo', !!ph);
+    if (ph && refs.photo.getAttribute('src') !== ph) refs.photo.src = ph;
+    if (!ph) refs.photo.removeAttribute('src');
     if (refs.decorKind !== d.d) {
       refs.decor.innerHTML = decorSVG(d.d);
       refs.decorKind = d.d;
@@ -291,7 +422,7 @@
     const back = $('#snow'), front = $('#fx');
     const bc = back.getContext('2d'), fc = front.getContext('2d');
     let W = 0, H = 0, flakes = [], stars = [], sparks = [];
-    let shoot = null, nextShoot = performance.now() + 3500;
+    let shoot = null, nextShoot = performance.now() + 3500, comet = null, rockets = [];
     let wind = 0, targetWind = 0, near = false, starAlpha = 1, last = performance.now();
     let accent = '#e8c26a', accent2 = '#fff3cf';
 
@@ -414,6 +545,42 @@
         ctx.drawImage(sprite, f.x - s / 2, f.y - s / 2, s, s);
       }
 
+      // comète (cinématique)
+      if (comet) {
+        const p = Math.min(1, (t - comet.t0) / comet.dur);
+        const e = p * p * (3 - 2 * p);
+        const x = comet.x0 + (comet.x1 - comet.x0) * e, y = comet.y0 + (comet.y1 - comet.y0) * e;
+        const dx = comet.x1 - comet.x0, dy = comet.y1 - comet.y0, len = Math.hypot(dx, dy) || 1;
+        const tail = 60 + 200 * Math.sin(Math.PI * Math.min(p, .9));
+        const tx = x - dx / len * tail, ty = y - dy / len * tail;
+        const g = fc.createLinearGradient(x, y, tx, ty);
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(.3, accent2);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        fc.globalAlpha = 1;
+        fc.strokeStyle = g; fc.lineWidth = 4; fc.lineCap = 'round';
+        fc.beginPath(); fc.moveTo(x, y); fc.lineTo(tx, ty); fc.stroke();
+        fc.drawImage(sprite, x - 22, y - 22, 44, 44);
+        for (let k = 0; k < 3; k++) dust(x, y);
+        if (p >= 1) { const cb = comet.cb; comet = null; if (cb) cb(); }
+      }
+
+      // fusées de feu d'artifice
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i];
+        r.vy += .06 * dt;
+        r.x += r.vx * dt; r.y += r.vy * dt;
+        fc.globalAlpha = 1; fc.fillStyle = '#fff';
+        fc.beginPath(); fc.arc(r.x, r.y, 2.2, 0, 6.283); fc.fill();
+        sparks.push({ x: r.x, y: r.y, vx: (Math.random() - .5) * .5, vy: Math.random() * .6, g: .02, drag: .96,
+          life: .7, decay: .03, size: 2, rot: 0, vr: 0, color: r.colors[0], star: false });
+        if (r.vy >= -1.2 || r.y <= r.ty) {
+          rockets.splice(i, 1);
+          burst(r.x, r.y, 90, { power: 8, lift: .5, colors: r.colors, decay: .006 });
+          if (r.onBurst) r.onBurst();
+        }
+      }
+
       // étincelles
       for (let i = sparks.length - 1; i >= 0; i--) {
         const s = sparks[i];
@@ -437,13 +604,13 @@
 
     function burst(x, y, n = 60, opts = {}) {
       if (reduceMotion) n = Math.min(n, 12);
-      const colors = [accent, '#ffffff', accent2, accent];
+      const colors = opts.colors || [accent, '#ffffff', accent2, accent];
       const power = opts.power || 7;
       for (let i = 0; i < n; i++) {
         const a = Math.random() * 6.283, sp = power * (.25 + Math.random() * .9);
         sparks.push({
           x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (opts.lift ?? 2.5),
-          g: .12, drag: .965, life: 1, decay: .007 + Math.random() * .012,
+          g: .12, drag: .965, life: 1, decay: (opts.decay || .007) + Math.random() * .012,
           size: 2.5 + Math.random() * 5, rot: Math.random() * 6, vr: (Math.random() - .5) * .3,
           color: colors[i % colors.length], star: Math.random() < .55,
         });
@@ -476,7 +643,35 @@
     resize();
     requestAnimationFrame(frame);
 
-    return { burst, rain, setTheme, setNear(v) { near = v; } };
+    function dust(x, y) {
+      if (sparks.length > 900) return;
+      sparks.push({
+        x: x + (Math.random() - .5) * 6, y: y + (Math.random() - .5) * 6,
+        vx: (Math.random() - .5) * .7, vy: .15 + Math.random() * .5,
+        g: .008, drag: .985, life: 1, decay: .012 + Math.random() * .016,
+        size: 1.5 + Math.random() * 2.6, rot: Math.random() * 6, vr: (Math.random() - .5) * .2,
+        color: Math.random() < .5 ? accent : (Math.random() < .5 ? '#ffffff' : accent2), star: Math.random() < .45,
+      });
+    }
+
+    function launchComet(x0, y0, x1, y1, dur, cb) {
+      comet = { x0, y0, x1, y1, dur, cb, t0: performance.now() };
+    }
+
+    const FIRE = [['#ff4d6d', '#ffd1dc', '#ffffff'], ['#7bdff2', '#d6f6ff', '#ffffff'], ['#ffd166', '#fff3c4', '#ffffff'],
+      ['#c77dff', '#f0dcff', '#ffffff'], ['#80ed99', '#dcffe4', '#ffffff']];
+    function firework(x, ty, onBurst) {
+      if (reduceMotion) return;
+      const colors = Math.random() < .35 ? [accent, accent2, '#ffffff'] : FIRE[Math.floor(Math.random() * FIRE.length)];
+      const vy = -Math.sqrt(2 * .06 * Math.max(60, H - ty)) * 1.02;
+      rockets.push({ x, y: H + 10, vx: (Math.random() - .5) * 1.2, vy, ty, colors, onBurst });
+    }
+
+    return {
+      burst, rain, dust, firework, setTheme, setNear(v) { near = v; },
+      comet: launchComet, cancelComet() { comet = null; },
+      size: () => [W, H],
+    };
   })();
 
   /* ------------------------------------------------------------
@@ -584,7 +779,46 @@
       ['C6', 'E6', 'G6', 'C7'].forEach((n, i) => bell(master, freq(N[n]), t + i * .09, 1.5, .1));
     }
 
-    return { start, stop, chime, get playing() { return playing; } };
+    let noiseBuf = null;
+    function noise() {
+      if (!noiseBuf) {
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuf;
+      return src;
+    }
+
+    // souffle de la comète
+    function whoosh(dur = 1.2) {
+      if (!ensure()) return;
+      const t = ctx.currentTime, src = noise();
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+      bp.frequency.setValueAtTime(300, t);
+      bp.frequency.exponentialRampToValueAtTime(3200, t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(.0001, t);
+      g.gain.exponentialRampToValueAtTime(.35, t + dur * .8);
+      g.gain.exponentialRampToValueAtTime(.0001, t + dur + .25);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + .3);
+    }
+
+    // petit « pop » de feu d'artifice
+    function pop() {
+      if (!ensure()) return;
+      const t = ctx.currentTime, src = noise();
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(.25, t);
+      g.gain.exponentialRampToValueAtTime(.0001, t + .5);
+      src.connect(lp); lp.connect(g); g.connect(master);
+      src.start(t); src.stop(t + .55);
+    }
+
+    return { start, stop, chime, whoosh, pop, get playing() { return playing; } };
   })();
 
   /* ------------------------------------------------------------
@@ -619,11 +853,13 @@
   /* ------------------------------------------------------------
      Création
      ------------------------------------------------------------ */
+  let previewData = null;
+
   const Creator = (() => {
     const fTo = $('#f-to'), fMsg = $('#f-msg'), fFrom = $('#f-from');
     const count = $('#count');
     let state = sanitize(store.get() || {});
-    let refs = null;
+    let refs = null, photoBlob = null, photoUrl = '', busy = false;
 
     $('#themes').innerHTML = Object.entries(THEMES).map(([k, t]) => `
       <label class="swatch">
@@ -638,6 +874,9 @@
         <span>${label}</span>
       </label>`).join('');
 
+    $('#photo-field').hidden = !API.enabled;
+    $('#privacy-note').hidden = !API.enabled;
+
     function syncForm() {
       fTo.value = state.to;
       fMsg.value = state.m;
@@ -647,9 +886,11 @@
       count.textContent = [...state.m].length;
     }
 
+    const current = () => ({ ...state, ph: photoUrl });
+
     function updatePreview() {
       if (!refs) refs = buildBook($('#preview-card .tilt'));
-      fillBook(refs, state);
+      fillBook(refs, current());
       const txt = state.m.trim();
       fitMsg(refs, txt || 'Ton message apparaîtra ici…');
       refs.msg.classList.toggle('placeholder', !txt);
@@ -685,6 +926,55 @@
       refs.book.classList.remove('open');
     });
 
+    /* --- photo --- */
+    const drop = $('#photo-drop'), fPhoto = $('#f-photo');
+    function showPhotoUI() {
+      const has = !!photoUrl;
+      $('#photo-empty').hidden = has;
+      $('#photo-filled').hidden = !has;
+      $('#photo-remove').hidden = !has;
+      if (has) $('#photo-thumb').src = photoUrl;
+    }
+    async function setPhoto(file) {
+      if (!file) return;
+      if (!/^image\//.test(file.type) && !/\.(heic|heif)$/i.test(file.name)) {
+        toast('Choisis un fichier image 📷');
+        return;
+      }
+      drop.classList.add('busy');
+      try {
+        const blob = await compressImage(file);
+        if (photoUrl) URL.revokeObjectURL(photoUrl);
+        photoBlob = blob;
+        photoUrl = URL.createObjectURL(blob);
+        showPhotoUI();
+        updatePreview();
+        refs.book.classList.add('open');
+        const [x, y] = centerOf(drop);
+        Sky.burst(x, y, 24, { power: 4, lift: 1 });
+      } catch {
+        toast("Cette photo n'a pas pu être lue. Essaie avec une photo JPG ou PNG 📷");
+      } finally {
+        drop.classList.remove('busy');
+        fPhoto.value = '';
+      }
+    }
+    function clearPhoto() {
+      if (photoUrl) URL.revokeObjectURL(photoUrl);
+      photoBlob = null;
+      photoUrl = '';
+      showPhotoUI();
+      updatePreview();
+    }
+    fPhoto.addEventListener('change', () => setPhoto(fPhoto.files[0]));
+    $('#photo-remove').addEventListener('click', clearPhoto);
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.classList.remove('drag');
+      setPhoto(e.dataTransfer.files[0]);
+    });
 
     const previewStage = $('#preview-stage');
     previewStage.addEventListener('click', () => refs && refs.book.classList.toggle('open'));
@@ -702,22 +992,46 @@
 
     $('#preview-full').addEventListener('click', () => {
       if (!validate()) return;
-      location.hash = 'c=' + encode(state);
+      previewData = current();
+      location.hash = 'apercu';
     });
 
-    $('#form').addEventListener('submit', e => {
-      e.preventDefault();
-      if (!validate()) return;
-      Share.open(state);
+    function celebrate() {
       const [x, y] = centerOf($('#create'));
       Sky.burst(x, y, 90, { power: 9 });
       Music.chime();
+    }
+
+    $('#form').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (busy || !validate()) return;
+      if (!API.enabled) {
+        Share.open(cardLink(state), state);
+        celebrate();
+        return;
+      }
+      const btn = $('#create'), label = btn.textContent;
+      busy = true;
+      btn.disabled = true;
+      btn.textContent = photoBlob ? 'Envoi de la photo…' : 'Création…';
+      try {
+        const id = await API.createCard(state, photoBlob);
+        Share.open(siteBase() + '#k=' + id, state);
+        celebrate();
+      } catch {
+        toast("Oups, la carte n'a pas pu être créée. Vérifie ta connexion et réessaie.");
+      } finally {
+        busy = false;
+        btn.disabled = false;
+        btn.textContent = label;
+      }
     });
 
     return {
       show() {
         setTheme(state.th);
         syncForm();
+        showPhotoUI();
         updatePreview();
         document.title = 'Crée ta carte de Noël ✨';
       },
@@ -731,8 +1045,8 @@
     const modal = $('#modal'), input = $('#share-link');
     let lastFocus = null, url = '';
 
-    function open(d) {
-      url = cardLink(d);
+    function open(link, d) {
+      url = link;
       const text = d.to ? `${d.to}, j'ai une carte de Noël pour toi ✨` : "J'ai une carte de Noël pour toi ✨";
       input.value = url;
       $('#wa-share').href = 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url);
@@ -746,6 +1060,7 @@
       $('#copy-btn').focus();
     }
     function close() {
+      if (modal.hidden) return;
       modal.hidden = true;
       if (lastFocus) lastFocus.focus();
     }
@@ -771,21 +1086,32 @@
   })();
 
   /* ------------------------------------------------------------
-     Lecture de la carte
+     Lecture de la carte (avec cinématique d'introduction)
      ------------------------------------------------------------ */
   const Viewer = (() => {
     const envWrap = $('#env-wrap'), env = $('#envelope'), card = $('#viewer-card');
     const tilt = $('#viewer-card .tilt'), glow = $('#card-glow');
     const endActions = $('#end-actions'), soundBtn = $('#sound-btn');
-    let data = null, refs = null, timers = [], opened = false, typing = null, spread = false;
+    const cine = $('#cine'), gateBox = $('#cine-gate'), gateTitle = $('#gate-title');
+    const gateBtn = $('#gate-btn'), gateNote = $('#gate-note'), sleigh = $('#sleigh');
+    let data = null, opts = {}, refs = null, timers = [], opened = false, typing = null, spread = false;
+    let cineTimers = [], sleighRAF = 0, gateMode = 'ready', started = false;
     let soundOn = true; // son activé par défaut
 
     const later = (fn, ms) => timers.push(setTimeout(fn, reduceMotion ? ms * .25 : ms));
+    const cineLater = (fn, ms) => cineTimers.push(setTimeout(fn, ms));
     function clear() {
       timers.forEach(clearTimeout);
       timers = [];
       if (typing) typing.cancel();
       typing = null;
+    }
+    function cineClear() {
+      cineTimers.forEach(clearTimeout);
+      cineTimers = [];
+      cancelAnimationFrame(sleighRAF);
+      sleigh.style.opacity = '0';
+      Sky.cancelComet();
     }
 
     function updateSpread() {
@@ -801,16 +1127,28 @@
       soundBtn.setAttribute('aria-label', soundOn ? 'Couper le son' : 'Activer le son');
     }
 
-    function setup(d) {
-      data = d;
+    /* La « caméra » regarde le ciel (sans animation), prête pour le travelling */
+    function camUp() {
+      const b = document.body;
+      b.classList.add('no-trans', 'cam-up');
+      void b.offsetWidth;
+      requestAnimationFrame(() => requestAnimationFrame(() => b.classList.remove('no-trans')));
+    }
+
+    function resetScene() {
       clear();
-      Music.stop();
       opened = false;
-      envWrap.className = 'env-wrap';
+      envWrap.className = 'env-wrap waiting';
       env.className = 'envelope';
       card.classList.remove('show');
       glow.classList.remove('show');
       endActions.classList.remove('show');
+    }
+
+    function setup(d, o) {
+      data = d;
+      opts = o || {};
+      resetScene();
       $('#env-to').textContent = d.to ? 'Pour ' + d.to : 'Pour toi';
       $('#env-title').textContent = d.f ? `${d.f} t'a envoyé une carte` : 'Tu as reçu une carte';
       refs = buildBook(tilt);
@@ -821,9 +1159,93 @@
       document.title = d.to ? `Une carte pour ${d.to} 🎄` : 'Une carte de Noël pour toi 🎄';
     }
 
+    function gate(mode) {
+      gateMode = mode;
+      cineClear();
+      cine.hidden = false;
+      cine.className = 'cine gate';
+      envWrap.classList.add('waiting');
+      camUp();
+      gateBox.classList.toggle('gate-loading', mode === 'loading');
+      gateTitle.textContent =
+        mode === 'loading' ? 'Chargement de ta carte…'
+        : mode === 'error' ? "La carte n'a pas pu être chargée"
+        : (data && data.to ? `${data.to}, une surprise t'attend` : "Une surprise t'attend");
+      gateBtn.textContent = mode === 'error' ? 'Réessayer' : 'Ouvrir ✨';
+      gateNote.hidden = mode !== 'ready';
+      if (mode !== 'loading') gateBtn.focus({ preventScroll: true });
+    }
+
+    function flySleigh() {
+      const m = $('#moon').getBoundingClientRect();
+      const [W] = Sky.size();
+      const mx = m.left + m.width / 2, my = m.top + m.height / 2;
+      const p0 = [-240, my + m.height * 1.3], p2 = [W + 240, my - m.height * .1];
+      const p1 = [2 * mx - .5 * (p0[0] + p2[0]), 2 * my - .5 * (p0[1] + p2[1])];
+      const sw = sleigh.getBoundingClientRect().width || 200, sh = sw * 80 / 240;
+      const dur = 5200, t0 = performance.now();
+      sleigh.style.opacity = '1';
+      const step = now => {
+        const p = Math.min(1, (now - t0) / dur), u = 1 - p;
+        const x = u * u * p0[0] + 2 * u * p * p1[0] + p * p * p2[0];
+        const y = u * u * p0[1] + 2 * u * p * p1[1] + p * p * p2[1] + Math.sin(p * 20) * 3;
+        const dx = 2 * u * (p1[0] - p0[0]) + 2 * p * (p2[0] - p1[0]);
+        const dy = 2 * u * (p1[1] - p0[1]) + 2 * p * (p2[1] - p1[1]);
+        const a = Math.atan2(dy, dx);
+        sleigh.style.transform = `translate(${(x - sw / 2).toFixed(1)}px, ${(y - sh / 2).toFixed(1)}px) rotate(${a.toFixed(3)}rad)`;
+        const bx = x - Math.cos(a) * sw * .42, by = y - Math.sin(a) * sw * .42 + sh * .2;
+        Sky.dust(bx, by);
+        Sky.dust(bx, by);
+        if (p < 1) sleighRAF = requestAnimationFrame(step);
+        else sleigh.style.opacity = '0';
+      };
+      sleighRAF = requestAnimationFrame(step);
+    }
+
+    function runCinematic() {
+      cineClear();
+      cine.hidden = false;
+      envWrap.classList.add('waiting');
+      if (reduceMotion) { endCinematic(false); return; }
+      camUp();
+      Sky.setNear(false);
+      cine.className = 'cine run veil bars';
+      $('#cine-kicker').textContent = data.f ? `${data.f} a pensé à toi` : "Quelqu'un a pensé à toi";
+      $('#cine-big').textContent = data.to ? `Pour ${data.to}` : 'Pour toi';
+      cineLater(() => cine.classList.add('t1'), 600);
+      cineLater(() => cine.classList.remove('t1'), 3100);
+      cineLater(() => {
+        cine.classList.remove('veil');
+        document.body.classList.remove('cam-up');
+      }, 3400);
+      cineLater(flySleigh, 5000);
+      cineLater(() => cine.classList.add('t2'), 6900);
+      cineLater(() => cine.classList.remove('t2'), 9600);
+      cineLater(() => {
+        const [W, H] = Sky.size();
+        if (soundOn) Music.whoosh(1.1);
+        Sky.comet(W * .9, -40, W / 2, H * .47, 1150, () => endCinematic(true));
+      }, 9700);
+    }
+
+    function endCinematic(flash) {
+      cineClear();
+      Sky.setNear(true);
+      document.body.classList.remove('cam-up');
+      envWrap.classList.remove('waiting');
+      cine.className = flash ? 'cine flash' : 'cine';
+      if (flash) {
+        const [W, H] = Sky.size();
+        Sky.burst(W / 2, H * .47, 90, { power: 9 });
+        if (soundOn) Music.chime();
+      }
+      cineLater(() => { cine.hidden = true; cine.className = 'cine'; }, 1000);
+    }
+
     function open() {
       if (opened || !data) return;
       opened = true;
+      if (opts.track && opts.id) API.track('open', opts.id, 'carte');
       if (soundOn) {
         Music.chime();
         later(() => { if (soundOn) Music.start(); }, 900);
@@ -848,8 +1270,17 @@
           Sky.burst(cx - r.width * .8, cy, 30, { power: 6 });
           Sky.burst(cx + r.width * .8, cy, 30, { power: 6 });
         }
+        if (data.ph) refs.polaroid.classList.add('show');
         startTyping();
       }, 4100);
+    }
+
+    function finale() {
+      const [W, H] = Sky.size();
+      for (let i = 0; i < 7; i++) {
+        later(() => Sky.firework(W * (.12 + Math.random() * .76), H * (.1 + Math.random() * .25),
+          () => { if (soundOn) Music.pop(); }), i * 480);
+      }
     }
 
     function startTyping() {
@@ -860,10 +1291,19 @@
         later(() => {
           endActions.classList.add('show');
           Sky.rain(60);
+          finale();
         }, 1100);
       });
     }
 
+    gateBtn.addEventListener('click', () => {
+      if (gateMode === 'error') { route(); return; }
+      if (gateMode !== 'ready') return;
+      started = true;
+      if (soundOn) Music.start();
+      runCinematic();
+    });
+    $('#cine-skip').addEventListener('click', () => endCinematic(true));
     env.addEventListener('click', open);
     env.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -877,10 +1317,13 @@
     soundBtn.addEventListener('click', () => {
       soundOn = !soundOn;
       if (!soundOn) Music.stop();
-      else if (opened) Music.start();
+      else if (started) Music.start();
       updateSoundIcon();
     });
-    $('#replay').addEventListener('click', () => setup(data));
+    $('#replay').addEventListener('click', () => {
+      setup(data, { ...opts, track: false });
+      runCinematic();
+    });
     $('#make-own').addEventListener('click', e => {
       e.preventDefault();
       history.pushState(null, '', location.pathname + location.search);
@@ -889,8 +1332,16 @@
     addEventListener('resize', updateSpread);
 
     return {
-      show(d) { setup(d); },
-      stop() { clear(); Music.stop(); },
+      loading() { data = null; resetScene(); Music.stop(); gate('loading'); },
+      error() { gate('error'); },
+      show(d, o) { setup(d, o); Music.stop(); started = false; gate('ready'); },
+      stop() {
+        clear();
+        cineClear();
+        Music.stop();
+        cine.hidden = true;
+        document.body.classList.remove('cam-up');
+      },
     };
   })();
 
@@ -898,30 +1349,73 @@
      Navigation
      ------------------------------------------------------------ */
   function parseHash() {
-    const m = location.hash.match(/[#&]c=([^&]+)/);
-    if (!m) return null;
-    try { return sanitize(decode(m[1])); } catch { return 'invalid'; }
+    const h = location.hash;
+    let m = h.match(/[#&]k=([A-Za-z0-9_-]{6,32})/);
+    if (m) return { kind: 'remote', id: m[1], notrack: /[#&]notrack\b/.test(h) };
+    if (/^#apercu\b/.test(h)) return previewData ? { kind: 'local', data: previewData, preview: true } : null;
+    m = h.match(/[#&]c=([^&]+)/);
+    if (m) {
+      try { return { kind: 'local', data: sanitize(decode(m[1])) }; } catch { return { kind: 'invalid' }; }
+    }
+    return null;
   }
 
-  function route() {
-    const d = parseHash();
-    const creator = $('#creator'), viewer = $('#viewer');
-    if (d && d !== 'invalid') {
-      Share.close();
-      $('#modal').hidden = true;
-      creator.hidden = true;
-      viewer.hidden = false;
-      scrollTo(0, 0);
-      setTheme(d.th);
-      Sky.setNear(true);
-      Viewer.show(d);
+  function showViewer(theme) {
+    Share.close();
+    $('#creator').hidden = true;
+    $('#viewer').hidden = false;
+    document.body.classList.add('v-mode');
+    scrollTo(0, 0);
+    if (theme) setTheme(theme);
+    Sky.setNear(true);
+  }
+
+  let visitLogged = false;
+  function showCreator() {
+    Viewer.stop();
+    $('#viewer').hidden = true;
+    $('#creator').hidden = false;
+    document.body.classList.remove('v-mode');
+    Sky.setNear(false);
+    Creator.show();
+    if (!visitLogged) { visitLogged = true; API.track('visit', null, 'atelier'); }
+  }
+
+  let routeSeq = 0;
+  async function route() {
+    const seq = ++routeSeq;
+    const r = parseHash();
+    if (r && r.kind === 'remote') {
+      showViewer(null);
+      Viewer.loading();
+      if (!API.enabled) {
+        toast("Ce site n'est pas encore relié à sa base de données.");
+        history.replaceState(null, '', location.pathname + location.search);
+        showCreator();
+        return;
+      }
+      try {
+        const d = await API.getCard(r.id);
+        if (seq !== routeSeq) return;
+        if (!d) {
+          toast('Cette carte est introuvable 😕');
+          history.replaceState(null, '', location.pathname + location.search);
+          showCreator();
+          return;
+        }
+        const track = !r.notrack && !API.mine.has(r.id);
+        if (track) API.track('view', r.id, 'carte');
+        setTheme(d.th);
+        Viewer.show(d, { id: r.id, track });
+      } catch {
+        if (seq === routeSeq) Viewer.error();
+      }
+    } else if (r && r.kind === 'local') {
+      showViewer(r.data.th);
+      Viewer.show(r.data, {});
     } else {
-      if (d === 'invalid') toast('Ce lien de carte semble abîmé 😕');
-      Viewer.stop();
-      viewer.hidden = true;
-      creator.hidden = false;
-      Sky.setNear(false);
-      Creator.show();
+      if (r && r.kind === 'invalid') toast('Ce lien de carte semble abîmé 😕');
+      showCreator();
     }
   }
 
@@ -935,6 +1429,35 @@
       out += `<polygon points="${x.toFixed(1)},${(b - h).toFixed(1)} ${(x - h * .3).toFixed(1)},${b.toFixed(1)} ${(x + h * .3).toFixed(1)},${b.toFixed(1)}"/>`;
     }
     $('#hill-trees').innerHTML = out;
+  })();
+
+  /* Montagnes enneigées de la cinématique */
+  (function mountains() {
+    let seed = 11;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const f = n => n.toFixed(1);
+    function range(cls, baseY, amp, step) {
+      const pts = [[-60, baseY]];
+      let x = -60;
+      while (x < 1500) {
+        x += step * (.5 + rnd() * .6);
+        pts.push([x, baseY - amp * (.5 + rnd() * .5), true]);
+        x += step * (.5 + rnd() * .6);
+        pts.push([x, baseY - amp * rnd() * .3]);
+      }
+      let caps = '';
+      for (let i = 1; i < pts.length - 1; i++) {
+        if (!pts[i][2]) continue;
+        const [px, py] = pts[i], [lx, ly] = pts[i - 1], [rx, ry] = pts[i + 1];
+        const k = .26;
+        const a = [px + (lx - px) * k, py + (ly - py) * k], b = [px + (rx - px) * k, py + (ry - py) * k];
+        const mid = (a[1] + b[1]) / 2;
+        caps += `<polygon class="m-cap" points="${f(px)},${f(py)} ${f(b[0])},${f(b[1])} ${f(px + (b[0] - px) * .45)},${f(mid - (mid - py) * .2)} ${f(px)},${f(mid + 4)} ${f(px + (a[0] - px) * .45)},${f(mid - (mid - py) * .25)} ${f(a[0])},${f(a[1])}"/>`;
+      }
+      const d = 'M' + pts.map(p => f(p[0]) + ' ' + f(p[1])).join(' L') + ' L1500 400 L-60 400Z';
+      return `<path class="${cls}" d="${d}"/>${caps}`;
+    }
+    $('#mountains').innerHTML = range('m-far', 290, 200, 110) + range('m-near', 350, 140, 80);
   })();
 
   addEventListener('hashchange', route);

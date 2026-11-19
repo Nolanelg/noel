@@ -21,6 +21,34 @@
     <div class="aurora a1"></div>
     <div class="aurora a2"></div>
     <div class="aurora a3"></div>
+    <div class="moon" id="moon"></div>
+    <svg class="mountains" id="mountains" viewBox="0 0 1440 400" preserveAspectRatio="xMidYMax slice"></svg>
+    <svg class="sleigh" id="sleigh" viewBox="0 0 240 80">
+      <g class="sleigh-body">
+        <path d="M150 52 L104 54 M196 44 L150 52" stroke="currentColor" stroke-width="1.6" fill="none" opacity=".8"/>
+        <path d="M8 56 Q10 70 30 70 L84 70 Q96 70 98 58" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M18 44 Q20 60 38 62 L84 62 Q94 62 96 50 L90 50 L86 34 L52 34 Q46 46 26 44 Z" fill="currentColor"/>
+        <circle cx="66" cy="22" r="7" fill="currentColor"/>
+        <path d="M56 34 Q58 24 66 26 Q76 24 78 34 Z" fill="currentColor"/>
+        <path d="M60 18 L66 6 L74 18 Z" fill="currentColor"/>
+        <path d="M30 40 Q34 22 50 30 Q48 40 40 42 Z" fill="currentColor"/>
+        <g class="deer">
+          <ellipse cx="140" cy="50" rx="17" ry="7" fill="currentColor"/>
+          <path d="M152 46 L160 32 L166 34 L158 48 Z" fill="currentColor"/>
+          <ellipse cx="166" cy="31" rx="7" ry="4" fill="currentColor"/>
+          <path d="M162 28 L158 18 M160 22 L154 20 M164 27 L166 16 M165 20 L170 15" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <path class="leg-a" d="M128 54 L118 62 M132 55 L124 66 M150 54 L160 62 M146 55 L154 66" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        </g>
+        <g class="deer deer2">
+          <ellipse cx="190" cy="42" rx="17" ry="7" fill="currentColor"/>
+          <path d="M202 38 L210 24 L216 26 L208 40 Z" fill="currentColor"/>
+          <ellipse cx="216" cy="23" rx="7" ry="4" fill="currentColor"/>
+          <circle cx="222" cy="23" r="2.6" fill="#ff3b3b" class="rudolph"/>
+          <path d="M212 20 L208 10 M210 14 L204 12 M214 19 L216 8 M215 12 L220 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <path class="leg-a" d="M178 46 L168 54 M182 47 L174 58 M200 46 L210 54 M196 47 L204 58" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        </g>
+      </g>
+    </svg>
   </div>
   <canvas id="snow" aria-hidden="true"></canvas>
   <svg class="hills" viewBox="0 0 1440 300" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
@@ -57,6 +85,22 @@
           <input type="text" id="f-from" maxlength="40" placeholder="Ton prénom">
         </div>
 
+        <div class="field" id="photo-field" hidden>
+          <span class="field-label">Photo <em>(facultatif)</em></span>
+          <label class="photo-drop" id="photo-drop">
+            <input type="file" id="f-photo" accept="image/*">
+            <span class="photo-empty" id="photo-empty">
+              <span class="photo-ico" aria-hidden="true">📷</span>
+              <span><b>Ajouter une photo</b><small>Elle apparaîtra dans la carte, façon Polaroïd</small></span>
+            </span>
+            <span class="photo-filled" id="photo-filled" hidden>
+              <img id="photo-thumb" alt="Photo choisie">
+              <span>Changer la photo</span>
+            </span>
+          </label>
+          <button type="button" class="link-btn" id="photo-remove" hidden>Retirer la photo</button>
+        </div>
+
         <fieldset class="field">
           <legend>Ambiance</legend>
           <div class="swatches" id="themes"></div>
@@ -81,17 +125,34 @@
       </div>
     </div>
 
-    <footer class="foot">Fait avec ♥ pour la famille</footer>
+    <footer class="foot">Fait avec ♥ pour la famille<span id="privacy-note" hidden><br>Ce site enregistre les cartes créées et des statistiques de visite.</span></footer>
   </main>
 
   <!-- ============ LECTURE ============ -->
   <section id="viewer" class="viewer" hidden>
-    <button class="sound-btn" id="sound-btn" type="button" aria-label="Musique">🔊</button>
+    <button class="sound-btn" id="sound-btn" type="button" aria-label="Couper le son">🔊</button>
+
+    <!-- Cinématique d'introduction -->
+    <div class="cine" id="cine" hidden>
+      <div class="cine-veil"></div>
+      <div class="cine-bar top"></div>
+      <div class="cine-bar bottom"></div>
+      <div class="cine-gate" id="cine-gate">
+        <div class="gate-star" aria-hidden="true">✦</div>
+        <p class="gate-title" id="gate-title">Une surprise t'attend</p>
+        <button class="btn primary gate-btn" id="gate-btn" type="button">Ouvrir ✨</button>
+        <p class="gate-note" id="gate-note">🔊 Monte le son pour la magie</p>
+      </div>
+      <p class="cine-text cine-t1" id="cine-t1">Un soir de décembre…</p>
+      <div class="cine-text cine-t2" id="cine-t2"><span class="kicker" id="cine-kicker"></span><span class="big" id="cine-big"></span></div>
+      <div class="cine-flash"></div>
+      <button class="cine-skip" id="cine-skip" type="button">Passer ⏭</button>
+    </div>
 
     <div class="stage" id="stage">
       <div class="card-glow" id="card-glow"></div>
 
-      <div class="env-wrap" id="env-wrap">
+      <div class="env-wrap waiting" id="env-wrap">
         <p class="env-title" id="env-title"></p>
         <div class="envelope" id="envelope" role="button" tabindex="0" aria-label="Ouvrir l'enveloppe">
           <div class="env-back"></div>
@@ -145,6 +206,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,17 +1,50 @@
 # 🎄 Carte de Noël animée
 
-Un petit site pour créer et envoyer des cartes de vœux de Noël animées à ses proches.
+Un site pour créer et envoyer des cartes de vœux de Noël animées à ses proches.
 
-- **Création** : destinataire, message, signature, 4 ambiances
-  (Nuit étoilée, Rouge velours, Forêt enneigée, Givre), 5 illustrations animées
-  (sapin, étoile, flocon, cadeau, bougie) et une boîte à musique qui se lance à l'ouverture (on peut couper le son). Un aperçu en 3D se met à jour en direct.
-- **Lecture** : une enveloppe flotte sous la neige. On brise le sceau de cire, le rabat s'ouvre, la lettre sort,
-  puis la carte s'ouvre comme un livre. Une pluie d'étincelles accompagne le message, qui s'écrit à la machine.
-  Il y a aussi des étoiles filantes et des aurores, et la neige suit le mouvement de la souris.
+- **Création** : destinataire, message, signature, **photo facultative** (façon Polaroïd), 4 ambiances
+  (Nuit étoilée, Rouge velours, Forêt enneigée, Givre) et 5 illustrations animées. Un aperçu en 3D se met à jour en direct.
+- **Cinématique** : écran d'accueil, puis bandes noires façon cinéma, texte « Un soir de décembre… », travelling
+  du ciel vers les montagnes enneigées sous la pleine lune, traîneau qui passe devant la lune en laissant une traînée
+  dorée, titre « Pour Mamie », puis une comète qui tombe et fait apparaître l'enveloppe (bouton « Passer » disponible).
+- **Ouverture** : on brise le sceau de cire, la lettre sort de l'enveloppe, la carte s'ouvre comme un livre,
+  la photo se « développe », le message s'écrit à la machine, puis un feu d'artifice éclate.
+  Une boîte à musique accompagne le tout (bouton pour couper le son).
+- **Tableau de bord privé** (`admin.html`) : visiteurs uniques, visites par jour, cartes créées (avec message et photo),
+  nombre d'ouvertures de chaque carte, appareils, provenance et activité récente.
 
-Tout tient dans trois fichiers statiques (`index.html`, `style.css`, `app.js`), sans dépendance ni serveur :
-le contenu de la carte est encodé dans le lien lui-même (`…/#c=…`). La musique est synthétisée dans le navigateur
-(Web Audio), donc il n'y a aucun fichier son.
+Le site est statique (`index.html`, `style.css`, `app.js`). Les cartes, photos et statistiques sont stockées
+dans [Supabase](https://supabase.com) (offre gratuite). Sans Supabase, le site fonctionne quand même, mais sans photo
+ni statistiques : le message est alors stocké dans le lien.
+
+## Brancher Supabase (≈ 10 minutes)
+
+1. **Crée un projet** : sur <https://supabase.com>, crée un compte, puis *New project*.
+   Choisis un nom (ex. `noel`) et la région *West EU (Paris)*.
+2. **Crée la base** : dans le projet, ouvre **SQL Editor → New query**, colle tout le contenu de
+   [`supabase/schema.sql`](supabase/schema.sql) et clique sur **Run**.
+3. **Crée ton compte administrateur** :
+   - **Authentication → Users → Add user → Create new user** : ton e-mail et un mot de passe solide,
+     coche *Auto Confirm User*.
+   - Retourne dans **SQL Editor** et lance (avec ton e-mail) :
+     ```sql
+     insert into public.admins (user_id)
+     select id from auth.users where email = 'ton-email@exemple.com';
+     ```
+   - Recommandé : **Authentication → Sign In / Providers → Email**, désactive *Allow new users to sign up*.
+4. **Relie le site** : dans **Project Settings → API**, copie la *Project URL* et la clé *anon public*
+   (ou *publishable*), puis colle-les dans [`config.js`](config.js).
+   Cette clé est faite pour être publique : ce sont les règles de la base qui protègent les données.
+
+Le tableau de bord sera ensuite à l'adresse `https://<ton-pseudo>.github.io/noel/admin.html`.
+
+### Ce qui est protégé
+
+- Le site public peut seulement **créer** une carte, **lire une carte précise** grâce à son lien (identifiant aléatoire)
+  et **enregistrer une visite**. Il ne peut pas lister les cartes ni lire les statistiques.
+- Seuls les comptes listés dans la table `admins` voient les cartes et les statistiques.
+- Les photos sont publiques pour qui a leur lien (nom aléatoire), limitées à 3 Mo et au format JPEG.
+- Les ouvertures faites depuis le navigateur qui a créé une carte ne sont pas comptées.
 
 ## Tester en local
 
@@ -21,10 +54,6 @@ python3 -m http.server 8000
 
 Puis ouvrir <http://localhost:8000>.
 
-## Mettre en ligne gratuitement (GitHub Pages)
+## Mise en ligne (GitHub Pages)
 
-1. Fusionner ces fichiers sur la branche `main`.
-2. Sur GitHub : **Settings → Pages → Build and deployment → Source : Deploy from a branch**, choisir `main` et `/ (root)`.
-3. Le site sera disponible après une minute environ, à l'adresse `https://<ton-pseudo>.github.io/no-l/`.
-
-Les liens de cartes générés depuis cette adresse peuvent ensuite être envoyés par WhatsApp, SMS ou e-mail.
+**Settings → Pages → Deploy from a branch** : choisir `main` et `/ (root)`, puis **Save**.

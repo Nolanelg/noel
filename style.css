@@ -626,3 +626,188 @@ input[type=text]:focus, textarea:focus {
     transition-duration: .25s !important;
   }
 }
+
+/* ============================================================
+   SCÈNE CINÉMATIQUE : lune, montagnes, traîneau
+   ============================================================ */
+.moon, .mountains, .sleigh { display: none; }
+body.v-mode .moon, body.v-mode .mountains, body.v-mode .sleigh { display: block; }
+
+.moon {
+  position: absolute; left: 64%; top: 15%;
+  width: min(24vmin, 210px); aspect-ratio: 1; border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 62%, rgba(150, 140, 120, .25) 0 9%, transparent 10%),
+    radial-gradient(circle at 62% 30%, rgba(150, 140, 120, .22) 0 6%, transparent 7%),
+    radial-gradient(circle at 66% 66%, rgba(150, 140, 120, .18) 0 12%, transparent 13%),
+    radial-gradient(circle at 38% 34%, #fffef6, #f4ecd6 55%, #dcd2b8);
+  box-shadow: 0 0 60px 18px rgba(255, 246, 215, .28), 0 0 180px 70px rgba(255, 246, 215, .12);
+  transition: transform 3.6s cubic-bezier(.45, 0, .2, 1);
+}
+.mountains {
+  position: absolute; left: 0; bottom: 0; width: 100%; height: 46vh; min-height: 220px;
+  transition: transform 3.3s .15s cubic-bezier(.45, 0, .2, 1);
+}
+.mountains .m-far { fill: color-mix(in srgb, var(--hill3) 32%, var(--bg2)); }
+.mountains .m-near { fill: color-mix(in srgb, var(--hill3) 50%, var(--bg1)); }
+.mountains .m-cap { fill: color-mix(in srgb, var(--hill1) 85%, transparent); }
+.hills { transition: transform 3.3s .35s cubic-bezier(.45, 0, .2, 1); }
+
+/* « caméra » levée vers le ciel, puis travelling vers le bas */
+body.cam-up .moon { transform: translateY(30vh) scale(1.3); }
+body.cam-up .mountains { transform: translateY(75%); }
+body.cam-up .hills { transform: translateY(105%); }
+body.no-trans .moon, body.no-trans .mountains, body.no-trans .hills { transition: none !important; }
+
+.sleigh {
+  position: absolute; left: 0; top: 0; width: min(210px, 42vw); height: auto;
+  color: color-mix(in srgb, var(--bg1) 85%, #000);
+  opacity: 0; will-change: transform;
+  filter: drop-shadow(0 0 6px rgba(255, 240, 200, .55));
+}
+.sleigh .leg-a { animation: gallop .35s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 0; }
+.sleigh .deer2 .leg-a { animation-delay: -.17s; }
+@keyframes gallop { from { transform: skewX(-14deg); } to { transform: skewX(14deg); } }
+.sleigh .rudolph { animation: twinkle .8s ease-in-out infinite alternate; }
+
+/* ============================================================
+   CINÉMATIQUE
+   ============================================================ */
+.cine { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.cine.gate, .cine.run { pointer-events: auto; }
+.cine-veil, .cine-bar, .cine-text, .cine-flash { pointer-events: none; }
+.cine-veil {
+  position: absolute; inset: 0; background: #020309; opacity: 0;
+  transition: opacity 1.8s ease;
+}
+.cine.gate .cine-veil, .cine.veil .cine-veil { opacity: 1; }
+.cine.gate .cine-veil { background: radial-gradient(120% 90% at 50% 40%, color-mix(in srgb, var(--bg2) 55%, #020309), #020309 70%); }
+
+.cine-bar {
+  position: absolute; left: 0; right: 0; height: 11vh; background: #000;
+  transition: transform 1s cubic-bezier(.6, 0, .2, 1);
+}
+.cine-bar.top { top: 0; transform: translateY(-100%); }
+.cine-bar.bottom { bottom: 0; transform: translateY(100%); }
+.cine.bars .cine-bar { transform: none; }
+
+.cine-gate {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center;
+  gap: 18px; padding: 24px; text-align: center;
+  opacity: 0; visibility: hidden; transition: opacity .8s, visibility .8s;
+}
+.cine.gate .cine-gate { opacity: 1; visibility: visible; }
+.gate-star {
+  font-size: 2.4rem; color: var(--accent); animation: spin 8s linear infinite;
+  text-shadow: 0 0 24px var(--accent);
+}
+.gate-title {
+  margin: 0; font-family: var(--script); font-size: clamp(2.4rem, 9vw, 4.2rem); line-height: 1.1;
+  background: linear-gradient(100deg, var(--accent) 20%, var(--accent2) 45%, var(--accent) 60%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 5s linear infinite; padding: 0 .2em .1em;
+}
+.gate-btn { flex: none; min-width: 200px; font-size: 1.1rem; padding: 16px 30px; border-radius: 99px; }
+.gate-note { margin: 0; color: rgba(255, 255, 255, .6); font-size: .9rem; }
+.gate-loading .gate-btn { display: none; }
+.gate-loading .gate-star { animation-duration: 1.6s; }
+
+.cine-text {
+  position: absolute; left: 0; right: 0; top: 50%; margin: 0; padding: 0 24px; text-align: center;
+  translate: 0 -50%; opacity: 0; filter: blur(12px);
+  transition: opacity 1.4s ease, filter 1.4s ease, letter-spacing 3s ease, transform 3s ease;
+}
+.cine-t1 {
+  font-family: var(--serif); font-style: italic; font-weight: 500;
+  font-size: clamp(1.8rem, 5vw, 3rem); color: #f3ead6; letter-spacing: .35em;
+}
+.cine.t1 .cine-t1 { opacity: 1; filter: none; letter-spacing: .08em; }
+.cine-t2 { display: grid; gap: .3em; transform: scale(1.08); top: 44%; }
+.cine-t2 .kicker {
+  font-family: var(--ui); text-transform: uppercase; letter-spacing: .4em; font-size: clamp(.75rem, 2vw, .95rem);
+  color: rgba(255, 255, 255, .85); text-shadow: 0 2px 14px rgba(0, 0, 0, .8);
+}
+.cine-t2 .big {
+  font-family: var(--script); font-size: clamp(3.2rem, 12vw, 6.5rem); line-height: 1.05; padding: 0 .2em .1em;
+  background: linear-gradient(100deg, var(--accent) 20%, var(--accent2) 45%, var(--accent) 60%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 4s linear infinite;
+  filter: drop-shadow(0 4px 24px rgba(0, 0, 0, .6));
+}
+.cine.t2 .cine-t2 { opacity: 1; filter: none; transform: none; }
+
+.cine-flash {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(circle at 50% 48%, #fff 0%, color-mix(in srgb, var(--accent2) 70%, transparent) 25%, transparent 65%);
+}
+.cine.flash .cine-flash { animation: camFlash 1s ease-out forwards; }
+@keyframes camFlash { 0% { opacity: 0; } 12% { opacity: 1; } 100% { opacity: 0; } }
+
+.cine-skip {
+  position: absolute; right: 18px; bottom: calc(11vh + 14px); z-index: 2;
+  background: rgba(255, 255, 255, .1); color: #fff; border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 99px; padding: 8px 16px; font-size: .85rem; cursor: pointer;
+  opacity: 0; visibility: hidden; transition: opacity .6s, visibility .6s, background .2s;
+}
+.cine.run .cine-skip { opacity: 1; visibility: visible; }
+.cine-skip:hover { background: rgba(255, 255, 255, .2); }
+.cine-skip:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+.env-wrap.waiting { display: none; }
+
+/* ============================================================
+   PHOTO
+   ============================================================ */
+.field-label {
+  font-size: .76rem; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(245, 241, 232, .7); font-weight: 500;
+}
+.field-label em { font-style: normal; text-transform: none; letter-spacing: 0; opacity: .7; }
+.photo-drop {
+  position: relative; display: block; cursor: pointer; border-radius: 16px;
+  border: 1.5px dashed rgba(255, 255, 255, .25); background: rgba(0, 0, 0, .18);
+  transition: border-color .2s, background .2s;
+}
+.photo-drop:hover, .photo-drop.drag { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.photo-drop:has(input:focus-visible) { outline: 2px solid #fff; outline-offset: 2px; }
+.photo-drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.photo-empty, .photo-filled { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
+.photo-empty small { display: block; color: rgba(255, 255, 255, .55); font-size: .82rem; margin-top: 2px; }
+.photo-ico { font-size: 1.6rem; }
+.photo-filled img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 3px solid #fff; transform: rotate(-4deg); box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }
+.photo-drop.busy { opacity: .6; pointer-events: none; }
+.link-btn {
+  justify-self: start; background: none; border: 0; padding: 2px 0; cursor: pointer;
+  color: rgba(255, 255, 255, .65); text-decoration: underline; font-size: .85rem;
+}
+.link-btn:hover { color: #fff; }
+
+/* Polaroïd dans la carte */
+.polaroid {
+  flex: none; align-self: center; margin: -4% 0 6%;
+  width: 62%; padding: 4% 4% 12%; background: #fff;
+  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, .45), 0 0 0 1px rgba(0, 0, 0, .04);
+  transform: rotate(-3deg); position: relative;
+}
+.polaroid::before {
+  content: ""; position: absolute; top: -7%; left: 50%; width: 38%; height: 14%;
+  translate: -50% 0; rotate: 2deg;
+  background: color-mix(in srgb, var(--accent) 45%, rgba(255, 255, 255, .6));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .15); opacity: .85;
+}
+.polaroid img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #ddd; }
+.has-photo .holly { width: 26%; top: -5%; right: -5%; }
+.has-photo .greet { font-size: calc(var(--w) * .085); }
+
+.viewer .polaroid { opacity: 0; transform: rotate(-12deg) translateY(-30px) scale(1.25); }
+.viewer .polaroid img { filter: sepia(.8) brightness(1.9) contrast(.5) blur(1.5px); transition: filter 4s ease .6s; }
+.viewer .polaroid.show { animation: polaroidDrop 1s cubic-bezier(.3, 1.4, .5, 1) forwards; }
+.viewer .polaroid.show img { filter: none; }
+@keyframes polaroidDrop { to { opacity: 1; transform: rotate(-3deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer .polaroid { opacity: 1; transform: rotate(-3deg); }
+  .viewer .polaroid img { filter: none; }
+}
