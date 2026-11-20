@@ -979,3 +979,13 @@ input[type=datetime-local]:focus { outline: none; border-color: var(--accent); b
 }
 .cth-globe::after { inset: auto auto 6px 50%; width: 58px; height: 14px; translate: -50% 0; background: linear-gradient(90deg, #3a1d12, #7a3f24, #2c150c); clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%); }
 @keyframes globeShake { 0%, 60%, 100% { transform: rotate(0); } 66% { transform: rotate(-9deg); } 74% { transform: rotate(8deg); } 82% { transform: rotate(-5deg); } 90% { transform: rotate(3deg); } }
+
+/* Envoi de la réponse par message */
+.reply-preview {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; text-align: left;
+  background: rgba(0, 0, 0, .25); border-left: 3px solid var(--accent);
+  font-family: var(--serif); font-style: italic; font-size: 1.05rem; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.reply-share { display: grid; gap: 8px; }
+.reply-card .reply-share .btn { width: 100%; margin: 0; flex: none; }
+.reply-back { justify-self: center; margin-top: 14px; display: block; margin-inline: auto; }

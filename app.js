@@ -1603,7 +1603,7 @@
       typing = typeWriter(refs.msg, text, () => {
         refs.sign.classList.add('show');
         later(() => {
-          replyBtn.hidden = !(API.enabled && opts.id);
+          replyBtn.hidden = false;
           endActions.classList.add('show');
           Sky.rain(60);
           finale();
@@ -1712,27 +1712,55 @@
       if (!reaction && !msg.value.trim()) { toast('Choisis une réaction ou écris un petit mot 💌'); return; }
       busy = true;
       send.disabled = true;
-      send.textContent = 'Envoi…';
-      try {
-        await API.addReply(cardId, reaction, msg.value.trim(), author.value.trim());
-        $('#reply-step').hidden = true;
-        $('#reply-done').hidden = false;
-        $('#reply-done-title').textContent = 'Réponse envoyée !';
-        $('#reply-ok').focus();
-        const [W, H] = Sky.size();
-        Sky.burst(W / 2, H * .4, 90, { power: 9 });
-        Music.chime();
-        $('#reply-btn').textContent = '💌 Répondre encore';
-      } catch {
-        toast("La réponse n'a pas pu être envoyée. Réessaie dans un instant.");
-      } finally {
-        busy = false;
-        send.disabled = false;
-        send.textContent = 'Envoyer ma réponse';
+      const text = replyText();
+      // Copie dans le tableau de bord (si la carte vient de la base) ; un échec ne bloque pas l'envoi
+      if (API.enabled && cardId) {
+        try { await API.addReply(cardId, reaction, msg.value.trim(), author.value.trim()); } catch { /* ignoré */ }
       }
+      busy = false;
+      send.disabled = false;
+      showShare(text);
+    });
+
+    // Texte de la réponse, prêt à être envoyé par message
+    function replyText() {
+      const who = author.value.trim();
+      const body = [reaction, msg.value.trim()].filter(Boolean).join(' ');
+      const sign = who ? `— ${who}` : '';
+      return [body, sign, 'En réponse à ta carte de Noël 🎄'].filter(Boolean).join('\n');
+    }
+
+    function showShare(text) {
+      $('#reply-step').hidden = true;
+      $('#reply-done').hidden = false;
+      $('#reply-done-title').textContent = sender ? `Envoie ta réponse à ${sender}` : 'Envoie ta réponse';
+      $('#reply-preview').textContent = text;
+      $('#reply-wa').href = 'https://wa.me/?text=' + encodeURIComponent(text);
+      $('#reply-sms').href = 'sms:?&body=' + encodeURIComponent(text);
+      const nat = $('#reply-native');
+      nat.hidden = !navigator.share;
+      nat.onclick = () => navigator.share({ text }).then(sent).catch(() => {});
+      $('#reply-copy').onclick = async () => {
+        try { await navigator.clipboard.writeText(text); toast('Réponse copiée, colle-la dans ta conversation 💌'); sent(); }
+        catch { toast('Copie impossible, sélectionne le texte à la main.'); }
+      };
+      (navigator.share ? nat : $('#reply-wa')).focus();
+    }
+
+    function sent() {
+      const [W, H] = Sky.size();
+      Sky.burst(W / 2, H * .4, 90, { power: 9 });
+      Music.chime();
+      $('#reply-btn').textContent = '💌 Répondre encore';
+    }
+    $('#reply-wa').addEventListener('click', sent);
+    $('#reply-sms').addEventListener('click', sent);
+    $('#reply-edit').addEventListener('click', () => {
+      $('#reply-done').hidden = true;
+      $('#reply-step').hidden = false;
+      msg.focus();
     });
     $('#reply-close').addEventListener('click', close);
-    $('#reply-ok').addEventListener('click', close);
     modal.addEventListener('click', e => { if (e.target === modal) close(); });
     addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 

@@ -260,13 +260,20 @@
         <div class="reactions" id="reactions" role="group" aria-label="Réaction"></div>
         <textarea id="reply-msg" maxlength="300" rows="3" placeholder="Merci, c'est trop mignon…"></textarea>
         <input type="text" id="reply-author" maxlength="40" placeholder="Ton prénom" aria-label="Ton prénom">
-        <button class="btn primary" type="submit" id="reply-send">Envoyer ma réponse</button>
+        <button class="btn primary" type="submit" id="reply-send">Continuer</button>
       </div>
       <div id="reply-done" hidden>
         <div class="modal-icon">✨</div>
-        <h2 id="reply-done-title">Réponse envoyée !</h2>
-        <p>Ton petit mot est bien arrivé.</p>
-        <button class="btn ghost" type="button" id="reply-ok">Fermer</button>
+        <h2 id="reply-done-title">Envoie ta réponse</h2>
+        <p id="reply-done-text">Choisis comment la faire parvenir :</p>
+        <blockquote class="reply-preview" id="reply-preview"></blockquote>
+        <div class="reply-share">
+          <button class="btn primary" type="button" id="reply-native" hidden>📤 Partager…</button>
+          <a class="btn primary" id="reply-wa" target="_blank" rel="noopener">WhatsApp</a>
+          <a class="btn ghost" id="reply-sms">SMS</a>
+          <button class="btn ghost" type="button" id="reply-copy">Copier le texte</button>
+        </div>
+        <button class="link-btn reply-back" type="button" id="reply-edit">← Modifier ma réponse</button>
       </div>
     </form>
   </div>
