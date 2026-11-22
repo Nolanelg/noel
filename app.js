@@ -152,7 +152,7 @@
         p_unlock_at: unlockAt ? unlockAt.toISOString() : null, p_voice_path: voicePath,
       });
       if (!res || typeof res.id !== 'string') throw new Error('identifiant manquant');
-      mine.add({ id: res.id, token: res.token, to: d.to, at: new Date().toISOString(), unlock: unlockAt ? unlockAt.toISOString() : null });
+      mine.add({ id: res.id, to: d.to, at: new Date().toISOString(), unlock: unlockAt ? unlockAt.toISOString() : null });
       return res;
     }
 

@@ -21,7 +21,7 @@ create table if not exists public.cards (
   opens          integer not null default 0,
   last_opened_at timestamptz
 );
--- Ajouts : date d'ouverture, message vocal (owner_token : ancien suivi, inutilisé)
+-- Ajouts : date d'ouverture, message vocal, cinématique (owner_token : ancien suivi, toujours vide)
 alter table public.cards add column if not exists unlock_at timestamptz;
 alter table public.cards add column if not exists voice_path text
   check (voice_path is null or voice_path ~ '^[A-Za-z0-9_-]{8,64}\.(webm|m4a|ogg)$');
@@ -29,6 +29,8 @@ alter table public.cards add column if not exists owner_token text;
 alter table public.cards add column if not exists cinema text not null default 'lune'
   check (cinema in ('lune', 'hyper', 'aurore', 'globe'));
 create unique index if not exists cards_owner_token_idx on public.cards (owner_token);
+create index if not exists cards_created_at_idx on public.cards (created_at desc);
+update public.cards set owner_token = null where owner_token is not null;
 
 -- Journal des visites et actions
 create table if not exists public.events (
@@ -106,11 +108,12 @@ create policy "admin supprime les reponses" on public.replies
 
 drop policy if exists "admin se voit" on public.admins;
 create policy "admin se voit" on public.admins
-  for select to authenticated using (user_id = auth.uid());
+  for select to authenticated using (user_id = (select auth.uid()));
 
 -- ---------- Fonctions appelées par le site ----------
 
--- Crée une carte et renvoie son identifiant (utilisé dans le lien)
+-- Crée une carte et renvoie son identifiant (utilisé dans le lien).
+-- Anti-abus : 60 cartes / 10 min sur tout le site, 15 par visiteur.
 drop function if exists public.create_card(text, text, text, text, text, text, text);
 drop function if exists public.create_card(text, text, text, text, text, text, text, timestamptz, text);
 create or replace function public.create_card(
@@ -125,11 +128,18 @@ set search_path = public, extensions
 as $$
 declare
   new_id text;
-  new_token text := translate(encode(gen_random_bytes(18), 'base64'), '+/', '-_');
   v_unlock timestamptz := null;
 begin
   if coalesce(btrim(p_message), '') = '' then
     raise exception 'message vide';
+  end if;
+  if (select count(*) from public.cards where created_at > now() - interval '10 minutes') >= 60 then
+    raise exception 'trop de cartes, reessaie plus tard';
+  end if;
+  if p_visitor_id is not null and (select count(*) from public.events
+      where type = 'create' and visitor_id = left(p_visitor_id, 64)
+        and created_at > now() - interval '10 minutes') >= 15 then
+    raise exception 'trop de cartes, reessaie plus tard';
   end if;
   if p_unlock_at is not null and p_unlock_at > now() and p_unlock_at < now() + interval '400 days' then
     v_unlock := p_unlock_at;
@@ -138,7 +148,7 @@ begin
     new_id := translate(encode(gen_random_bytes(9), 'base64'), '+/', '-_');
     exit when not exists (select 1 from public.cards where id = new_id);
   end loop;
-  insert into public.cards (id, recipient, message, sender, theme, decor, photo_path, voice_path, unlock_at, owner_token, cinema)
+  insert into public.cards (id, recipient, message, sender, theme, decor, photo_path, voice_path, unlock_at, cinema)
   values (
     new_id,
     left(coalesce(btrim(p_recipient), ''), 40),
@@ -149,12 +159,11 @@ begin
     nullif(p_photo_path, ''),
     nullif(p_voice_path, ''),
     v_unlock,
-    new_token,
     case when p_cinema in ('lune', 'hyper', 'aurore', 'globe') then p_cinema else 'lune' end
   );
   insert into public.events (type, card_id, visitor_id)
   values ('create', new_id, left(p_visitor_id, 64));
-  return json_build_object('id', new_id, 'token', new_token);
+  return json_build_object('id', new_id);
 end;
 $$;
 
@@ -181,7 +190,7 @@ as $$
   where c.id = p_id;
 $$;
 
--- Enregistre une visite / une vue / une ouverture de carte
+-- Enregistre une visite / une vue / une ouverture de carte (3000 max / 10 min)
 create or replace function public.log_event(
   p_type text, p_card_id text default null, p_visitor_id text default null,
   p_page text default null, p_referrer text default null, p_user_agent text default null,
@@ -195,6 +204,9 @@ declare
   v_card text := null;
 begin
   if p_type not in ('visit', 'view', 'open') then
+    return;
+  end if;
+  if (select count(*) from public.events where created_at > now() - interval '10 minutes') >= 3000 then
     return;
   end if;
   if p_card_id is not null and exists (select 1 from public.cards where id = p_card_id) then
@@ -256,6 +268,19 @@ grant execute on function public.is_admin() to authenticated;
 -- ---------- Photos et messages vocaux ----------
 -- Dossiers publics : lisibles par lien, ajout possible depuis le site,
 -- 3 Mo maximum. Personne ne peut lister ni modifier les fichiers.
+-- Anti-abus : 120 envois / 10 min et 4000 fichiers au total.
+
+create or replace function public.uploads_allowed()
+returns boolean
+language sql stable security definer
+set search_path = public, storage
+as $$
+  select (select count(*) from storage.objects
+          where bucket_id in ('photos', 'voix') and created_at > now() - interval '10 minutes') < 120
+     and (select count(*) from storage.objects where bucket_id in ('photos', 'voix')) < 4000;
+$$;
+revoke all on function public.uploads_allowed() from public;
+grant execute on function public.uploads_allowed() to anon, authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('photos', 'photos', true, 3145728, array['image/jpeg'])
@@ -272,8 +297,9 @@ drop policy if exists "site ajoute des photos" on storage.objects;
 create policy "site ajoute des photos" on storage.objects
   for insert to anon, authenticated
   with check (
-    (bucket_id = 'photos' and name ~ '^[A-Za-z0-9_-]{8,64}\.jpg$')
-    or (bucket_id = 'voix' and name ~ '^[A-Za-z0-9_-]{8,64}\.(webm|m4a|ogg)$')
+    ((bucket_id = 'photos' and name ~ '^[A-Za-z0-9_-]{8,64}\.jpg$')
+      or (bucket_id = 'voix' and name ~ '^[A-Za-z0-9_-]{8,64}\.(webm|m4a|ogg)$'))
+    and public.uploads_allowed()
   );
 
 drop policy if exists "admin lit les photos" on storage.objects;
