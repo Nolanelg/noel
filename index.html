@@ -157,7 +157,7 @@
         <fieldset class="field">
           <legend>Cinématique d'ouverture</legend>
           <div class="cinemas" id="cinemas"></div>
-          <button type="button" class="link-btn" id="cinema-preview">▶ Voir la cinématique choisie en plein écran</button>
+          <button type="button" class="chip cinema-play" id="cinema-preview">▶ Voir un aperçu de la cinématique</button>
         </fieldset>
 
         <fieldset class="field">
@@ -212,6 +212,16 @@
       <div class="cine-text cine-t2" id="cine-t2"><span class="kicker" id="cine-kicker"></span><span class="big" id="cine-big"></span></div>
       <div class="cine-flash"></div>
       <button class="cine-skip" id="cine-skip" type="button">Passer ⏭</button>
+    </div>
+
+    <!-- Fin de l'aperçu d'une cinématique (depuis l'atelier) -->
+    <div class="cine-end" id="cine-end" hidden>
+      <p class="cine-end-title">Fin de l'aperçu</p>
+      <p class="cine-end-text">Ensuite, ton destinataire ouvrira l'enveloppe et découvrira ta carte.</p>
+      <div class="cine-end-actions">
+        <button class="btn ghost" id="cine-again" type="button">↺ Revoir</button>
+        <button class="btn primary" id="cine-back" type="button">Retour à l'atelier</button>
+      </div>
     </div>
 
     <div class="stage" id="stage">

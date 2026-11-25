@@ -1050,3 +1050,17 @@ input[type=datetime-local]:focus { outline: none; border-color: var(--accent); b
 .rv-rain { position: fixed; inset: 0; pointer-events: none; z-index: 55; overflow: hidden; }
 .rv-rain span { position: absolute; top: -12vh; animation: rvFall linear forwards; }
 @keyframes rvFall { to { transform: translateY(125vh) rotate(var(--rot, 360deg)); } }
+
+/* Aperçu d'une cinématique depuis l'atelier */
+.cinema-play { justify-self: start; font-size: .9rem; padding: 8px 16px; }
+.cine-end {
+  position: fixed; left: 50%; top: 50%; translate: -50% -50%; z-index: 35;
+  width: min(440px, calc(100% - 32px)); padding: 28px 24px; text-align: center; border-radius: 24px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--bg2) 85%, #fff 6%), var(--bg1));
+  border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 40px 100px -20px rgba(0, 0, 0, .7);
+  animation: pop .5s var(--ease-spring);
+}
+.cine-end-title { margin: 0; font-family: var(--script); font-size: 2.8rem; color: var(--accent); line-height: 1.1; }
+.cine-end-text { margin: 8px 0 20px; color: rgba(255, 255, 255, .75); line-height: 1.5; }
+.cine-end-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.cine-end-actions .btn { flex: 1 1 150px; }

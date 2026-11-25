@@ -956,7 +956,10 @@
       }
     }
 
-    return { start, stop, chime, whoosh, pop, duck, swell, bells, get playing() { return playing; } };
+    // autorise une nouvelle écoute (quand la personne relance elle-même la carte)
+    function rearm() { stop(); played = false; }
+
+    return { start, stop, rearm, unlock: ensure, chime, whoosh, pop, duck, swell, bells, get playing() { return playing; } };
   })();
 
   /* ------------------------------------------------------------
@@ -1193,7 +1196,11 @@
       const [x, y] = centerOf(e.target.closest('.cinema-opt'));
       Sky.burst(x, y, 20, { power: 3.5, lift: 1 });
     });
-    $('#cinema-preview').addEventListener('click', () => $('#preview-full').click());
+    $('#cinema-preview').addEventListener('click', () => {
+      previewData = current();
+      Music.unlock();   // le son est autorisé grâce à ce clic
+      location.hash = 'apercu-cinematique';
+    });
     $('#decors').addEventListener('change', e => {
       state.d = e.target.value;
       save();
@@ -1425,6 +1432,7 @@
 
     function resetScene() {
       clear();
+      $('#cine-end').hidden = true;
       if (refs && refs.stopVoice) refs.stopVoice();
       opened = false;
       envWrap.className = 'env-wrap waiting';
@@ -1558,7 +1566,8 @@
       cineClear();
       Sky.setNear(true);
       document.body.classList.remove('cam-up');
-      envWrap.classList.remove('waiting');
+      if (opts.cinemaOnly) $('#cine-end').hidden = false;
+      else envWrap.classList.remove('waiting');
       cine.className = flash ? 'cine flash' : 'cine';
       if (flash) {
         const [W, H] = Sky.size();
@@ -1632,6 +1641,16 @@
       runCinematic();
     });
     $('#cine-skip').addEventListener('click', () => endCinematic(true));
+    $('#cine-again').addEventListener('click', () => {
+      $('#cine-end').hidden = true;
+      Music.rearm();
+      if (soundOn) Music.start();
+      runCinematic();
+    });
+    $('#cine-back').addEventListener('click', () => {
+      history.pushState(null, '', location.pathname + location.search);
+      route();
+    });
     env.addEventListener('click', open);
     env.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -1651,6 +1670,8 @@
     replyBtn.addEventListener('click', () => Reply.open(data, opts.id));
     $('#replay').addEventListener('click', () => {
       setup(data, { ...opts, track: false });
+      Music.rearm();
+      if (soundOn) Music.start();
       runCinematic();
     });
     $('#make-own').addEventListener('click', e => {
@@ -1663,7 +1684,15 @@
     return {
       loading() { data = null; resetScene(); Music.stop(); gate('loading'); },
       error() { gate('error'); },
-      show(d, o) { setup(d, o); Music.stop(); started = false; gate(d.locked ? 'locked' : 'ready'); },
+      show(d, o) { setup(d, o); Music.rearm(); started = false; gate(d.locked ? 'locked' : 'ready'); },
+      // aperçu de la cinématique seule (depuis l'atelier)
+      previewCinema(d) {
+        setup(d, { cinemaOnly: true });
+        Music.rearm();
+        started = true;
+        if (soundOn) Music.start();
+        runCinematic();
+      },
       stop() {
         clear();
         clearInterval(cdTimer);
@@ -1892,6 +1921,7 @@
     if (m) {
       try { return { kind: 'reply', data: sanitizeReply(decode(m[1])) }; } catch { return { kind: 'invalid' }; }
     }
+    if (/^#apercu-cinematique\b/.test(h)) return previewData ? { kind: 'local', data: previewData, cinemaOnly: true } : null;
     if (/^#apercu\b/.test(h)) return previewData ? { kind: 'local', data: previewData, preview: true } : null;
     m = h.match(/[#&]c=([^&]+)/);
     if (m) {
@@ -1968,7 +1998,8 @@
       }
     } else if (r && r.kind === 'local') {
       showViewer(r.data.th);
-      Viewer.show(r.data, {});
+      if (r.cinemaOnly) Viewer.previewCinema(r.data);
+      else Viewer.show(r.data, {});
     } else {
       if (r && r.kind === 'invalid') toast('Ce lien de carte semble abîmé 😕');
       showCreator();
