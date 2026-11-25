@@ -989,3 +989,64 @@ input[type=datetime-local]:focus { outline: none; border-color: var(--accent); b
 .reply-share { display: grid; gap: 8px; }
 .reply-card .reply-share .btn { width: 100%; margin: 0; flex: none; }
 .reply-back { justify-self: center; margin-top: 14px; display: block; margin-inline: auto; }
+
+/* ============================================================
+   CARTE-RÉPONSE ANIMÉE
+   ============================================================ */
+.reply-peek { display: block; margin: -6px auto 16px; text-align: center; }
+.replyview { position: relative; z-index: 3; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: 16px; overflow: hidden; }
+.rv-gate { display: grid; justify-items: center; gap: 22px; text-align: center; animation: rise 1s var(--ease-out) both; }
+.rv-gate[hidden] { display: none; }
+.rv-icon { font-size: 5rem; animation: float 4s ease-in-out infinite; filter: drop-shadow(0 0 30px color-mix(in srgb, var(--accent) 60%, transparent)); }
+.rv-title {
+  margin: 0; font-family: var(--script); font-size: clamp(2.6rem, 10vw, 4.4rem); line-height: 1.1; padding: 0 .2em .1em; max-width: 92vw;
+  background: linear-gradient(100deg, var(--accent) 20%, var(--accent2) 45%, var(--accent) 60%); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 5s linear infinite;
+}
+.rv-stage { display: grid; justify-items: center; gap: 26px; perspective: 1600px; }
+.rv-card {
+  --w: min(360px, 84vw, calc((100svh - 160px) * .72));
+  position: relative; width: var(--w); aspect-ratio: .72; transform-style: preserve-3d;
+  transform: translateY(70vh) rotateY(180deg) rotateZ(-10deg) scale(.6);
+  transition: transform 1.1s cubic-bezier(.2, .9, .25, 1.05);
+}
+.rv-card.in { transform: translateY(0) rotateY(180deg) rotateZ(-3deg) scale(1); }
+.rv-card.flip { transform: rotateY(0) rotateZ(0) scale(1); transition-duration: 1.2s; transition-timing-function: cubic-bezier(.6, 0, .2, 1); }
+.rv-face { position: absolute; inset: 0; border-radius: 14px; -webkit-backface-visibility: hidden; backface-visibility: hidden; overflow: hidden; }
+.rv-back {
+  transform: rotateY(180deg); display: grid; place-content: center; justify-items: center; gap: 18px;
+  background: radial-gradient(110% 80% at 50% 25%, color-mix(in srgb, var(--cover) 85%, #fff), var(--cover) 45%, var(--cover2));
+  box-shadow: 0 30px 60px -18px rgba(0, 0, 0, .65), inset 0 0 0 1px rgba(255, 255, 255, .1);
+}
+.rv-back::before { content: ""; position: absolute; inset: 6%; border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent); border-radius: 8px; }
+.rv-seal {
+  width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; font-size: 2.2rem; color: #ffd9de;
+  background: radial-gradient(circle at 35% 30%, var(--seal2), var(--seal) 60%, color-mix(in srgb, var(--seal) 65%, #000));
+  box-shadow: 0 6px 14px rgba(0, 0, 0, .4), inset 0 0 0 6px color-mix(in srgb, var(--seal) 80%, #000);
+}
+.rv-back-txt { margin: 0; font-family: var(--script); font-size: calc(var(--w) * .11); color: var(--accent); }
+.rv-front {
+  display: flex; flex-direction: column; padding: 18% 9% 9%; color: var(--ink); overflow: visible;
+  background: radial-gradient(120% 70% at 50% 0%, #fff, var(--paper) 65%), var(--paper);
+  box-shadow: 0 30px 60px -18px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(0, 0, 0, .05);
+}
+.rv-front::before { content: ""; position: absolute; inset: 5%; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 6px; pointer-events: none; }
+.rv-emoji {
+  position: absolute; left: 50%; top: 0; width: calc(var(--w) * .3); aspect-ratio: 1; translate: -50% -50%;
+  display: grid; place-items: center; font-size: calc(var(--w) * .16); border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fffaf0, var(--paper)); box-shadow: 0 0 0 4px var(--accent), 0 12px 30px -6px rgba(0, 0, 0, .5);
+  transform: scale(0); z-index: 2;
+}
+.rv-card.flip .rv-emoji { animation: emojiPop .8s .9s cubic-bezier(.3, 1.8, .5, 1) forwards; }
+@keyframes emojiPop { to { transform: scale(1); } }
+.rv-greet { font-family: var(--script); font-size: calc(var(--w) * .11); margin: 0 0 .25em; }
+.rv-msg-wrap { flex: 1; min-height: 0; overflow: hidden; }
+.rv-msg { margin: 0; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: calc(var(--w) * .065); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rv-sign { margin: .3em 0 0; text-align: right; font-family: var(--script); font-size: calc(var(--w) * .1); opacity: 0; transform: translateY(8px); transition: opacity .8s, transform .8s; }
+.rv-sign.show { opacity: 1; transform: none; }
+.rv-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(16px); transition: opacity .7s, transform .7s; pointer-events: none; }
+.rv-actions.show { opacity: 1; transform: none; pointer-events: auto; }
+.rv-actions .btn.ghost { background: rgba(0, 0, 0, .3); }
+.rv-rain { position: fixed; inset: 0; pointer-events: none; z-index: 55; overflow: hidden; }
+.rv-rain span { position: absolute; top: -12vh; animation: rvFall linear forwards; }
+@keyframes rvFall { to { transform: translateY(125vh) rotate(var(--rot, 360deg)); } }

@@ -266,8 +266,9 @@
       <div id="reply-done" hidden>
         <div class="modal-icon">✨</div>
         <h2 id="reply-done-title">Envoie ta réponse</h2>
-        <p id="reply-done-text">Choisis comment la faire parvenir :</p>
+        <p id="reply-done-text">Ta réponse devient une petite carte animée ✨ Envoie-lui le lien :</p>
         <blockquote class="reply-preview" id="reply-preview"></blockquote>
+        <a class="link-btn reply-peek" id="reply-peek" target="_blank" rel="noopener">👀 Voir ce qu'il va recevoir</a>
         <div class="reply-share">
           <button class="btn primary" type="button" id="reply-native" hidden>📤 Partager…</button>
           <a class="btn primary" id="reply-wa" target="_blank" rel="noopener">WhatsApp</a>
@@ -278,6 +279,34 @@
       </div>
     </form>
   </div>
+
+  <!-- ============ CARTE-RÉPONSE ============ -->
+  <section id="replyview" class="replyview" hidden>
+    <div class="rv-gate" id="rv-gate">
+      <div class="rv-icon" aria-hidden="true">💌</div>
+      <p class="rv-title" id="rv-title">Tu as reçu une réponse</p>
+      <button class="btn primary gate-btn" id="rv-open" type="button">Lire la réponse ✨</button>
+    </div>
+    <div class="rv-stage" id="rv-stage" hidden>
+      <div class="rv-card" id="rv-card">
+        <div class="rv-face rv-back">
+          <div class="rv-seal" aria-hidden="true">✦</div>
+          <p class="rv-back-txt">Une réponse pour toi</p>
+        </div>
+        <div class="rv-face rv-front">
+          <div class="rv-emoji" id="rv-emoji" aria-hidden="true"></div>
+          <p class="rv-greet" id="rv-greet"></p>
+          <div class="rv-msg-wrap"><p class="rv-msg" id="rv-msg"></p></div>
+          <p class="rv-sign" id="rv-sign"></p>
+        </div>
+      </div>
+      <div class="rv-actions" id="rv-actions">
+        <button class="btn ghost sm" id="rv-replay" type="button">↺ Revoir</button>
+        <a class="btn primary sm" href="./" id="rv-make">Créer ma carte ✨</a>
+      </div>
+    </div>
+    <div class="rv-rain" id="rv-rain" aria-hidden="true"></div>
+  </section>
 
   <!-- ============ PARTAGE ============ -->
   <div class="modal" id="modal" hidden>

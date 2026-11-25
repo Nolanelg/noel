@@ -20,6 +20,7 @@
     foret: { label: 'Forêt enneigée', sw: ['#154a31', '#e3b866'], stars: .85, meta: '#020c08' },
     givre: { label: 'Givre',          sw: ['#d9eaf7', '#4f86b8'], stars: .35, meta: '#0a1d36' },
   };
+  const REACTIONS = ['❤️', '🥰', '😭', '😂', '🎄', '🙏'];
   const DECORS = { sapin: 'Sapin', etoile: 'Étoile', flocon: 'Flocon', cadeau: 'Cadeau', bougie: 'Bougie' };
   const CINEMAS = {
     lune:   { label: 'Clair de lune',  desc: 'Travelling sous la pleine lune, le traîneau passe' },
@@ -58,6 +59,13 @@
     };
   }
   const siteBase = () => location.href.split('#')[0];
+  function sanitizeReply(o) {
+    if (!o || typeof o !== 'object') throw new Error('bad');
+    const re = REACTIONS.includes(o.re) ? o.re : '';
+    const m = str(o.m, 300);
+    if (!re && !m.trim()) throw new Error('empty');
+    return { to: str(o.to, 40), from: str(o.from, 40), m, re, th: THEMES[o.th] ? o.th : 'nuit' };
+  }
   function cardLink(d) {
     return siteBase() + '#c=' + encode(d);
   }
@@ -828,12 +836,17 @@
         bass(song, freq(N[n]), bt, BEAT * 1.8, .13);
         bass(song, freq(N[n] + 7), bt + 2 * BEAT, BEAT * 1.8, .08);
       });
-      const len = LOOP_BEATS * BEAT;
-      loopTimer = setTimeout(() => scheduleLoop(t0 + len), Math.max(0, (t0 + len - ctx.currentTime - 1.5) * 1000));
+      // accord final, puis la musique s'arrête (elle ne tourne pas en boucle)
+      const end = t0 + 64 * BEAT;
+      ['C5', 'E5', 'G5', 'C6'].forEach((n, i) => bell(song, freq(N[n]), end + i * .06, 3.2, .14));
+      bass(song, freq(N.C3), end, 2.4, .12);
+      loopTimer = setTimeout(() => { playing = false; played = true; song = null; }, Math.max(0, (end + 3.4 - ctx.currentTime) * 1000));
     }
 
+    // une seule écoute complète par visite
+    let played = false;
     function start() {
-      if (playing || !ensure()) return;
+      if (playing || played || !ensure()) return;
       playing = true;
       song = ctx.createGain();
       song.connect(master);
@@ -1669,8 +1682,7 @@
   const Reply = (() => {
     const modal = $('#reply-modal'), form = $('#reply-form'), box = $('#reactions');
     const msg = $('#reply-msg'), author = $('#reply-author'), send = $('#reply-send');
-    const REACTIONS = ['❤️', '🥰', '😭', '😂', '🎄', '🙏'];
-    let cardId = null, reaction = null, busy = false, lastFocus = null, sender = '';
+    let cardId = null, reaction = null, busy = false, lastFocus = null, sender = '', recipient = '', theme = 'nuit';
 
     box.replaceChildren(...REACTIONS.map(e => {
       const b = document.createElement('button');
@@ -1689,6 +1701,8 @@
     function open(d, id) {
       cardId = id;
       sender = d.f || '';
+      recipient = d.to || '';
+      theme = d.th;
       reaction = null;
       box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', 'false'));
       msg.value = '';
@@ -1723,27 +1737,30 @@
     });
 
     // Texte de la réponse, prêt à être envoyé par message
+    // Lien vers la carte-réponse animée + petit texte d'accompagnement
     function replyText() {
-      const who = author.value.trim();
-      const body = [reaction, msg.value.trim()].filter(Boolean).join(' ');
-      const sign = who ? `— ${who}` : '';
-      return [body, sign, 'En réponse à ta carte de Noël 🎄'].filter(Boolean).join('\n');
+      const who = author.value.trim() || recipient;
+      const link = siteBase() + '#r=' + encode({ to: sender, from: who, m: msg.value.trim(), re: reaction || '', th: theme });
+      return { link, text: `💌 Ma réponse à ta carte de Noël ✨ ${link}` };
     }
 
-    function showShare(text) {
+    function showShare({ link, text }) {
       $('#reply-step').hidden = true;
       $('#reply-done').hidden = false;
       $('#reply-done-title').textContent = sender ? `Envoie ta réponse à ${sender}` : 'Envoie ta réponse';
-      $('#reply-preview').textContent = text;
+      $('#reply-done-text').textContent = `Ta réponse devient une petite carte animée ✨ ${sender ? sender + ' la' : 'On la'} verra en ouvrant le lien.`;
+      $('#reply-preview').textContent = [reaction, msg.value.trim()].filter(Boolean).join(' ');
+      $('#reply-peek').href = link;
       $('#reply-wa').href = 'https://wa.me/?text=' + encodeURIComponent(text);
       $('#reply-sms').href = 'sms:?&body=' + encodeURIComponent(text);
       const nat = $('#reply-native');
       nat.hidden = !navigator.share;
-      nat.onclick = () => navigator.share({ text }).then(sent).catch(() => {});
+      nat.onclick = () => navigator.share({ text: '💌 Ma réponse à ta carte de Noël ✨', url: link }).then(sent).catch(() => {});
       $('#reply-copy').onclick = async () => {
-        try { await navigator.clipboard.writeText(text); toast('Réponse copiée, colle-la dans ta conversation 💌'); sent(); }
+        try { await navigator.clipboard.writeText(text); toast('Lien copié, colle-le dans ta conversation 💌'); sent(); }
         catch { toast('Copie impossible, sélectionne le texte à la main.'); }
       };
+      $('#reply-copy').textContent = 'Copier le lien';
       (navigator.share ? nat : $('#reply-wa')).focus();
     }
 
@@ -1768,12 +1785,113 @@
   })();
 
   /* ------------------------------------------------------------
+     Carte-réponse animée (lien #r=…)
+     ------------------------------------------------------------ */
+  const ReplyView = (() => {
+    const sec = $('#replyview'), gate = $('#rv-gate'), stage = $('#rv-stage'), card = $('#rv-card');
+    const rain = $('#rv-rain'), actions = $('#rv-actions');
+    let data = null, timers = [], typing = null;
+    const later = (fn, ms) => timers.push(setTimeout(fn, reduceMotion ? ms * .2 : ms));
+    function clear() {
+      timers.forEach(clearTimeout);
+      timers = [];
+      if (typing) typing.cancel();
+      typing = null;
+      rain.replaceChildren();
+    }
+
+    function emojiRain(emoji, n = 36) {
+      if (reduceMotion) return;
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < n; i++) {
+        const sp = document.createElement('span');
+        sp.textContent = emoji;
+        sp.style.left = (Math.random() * 100) + 'vw';
+        sp.style.fontSize = (18 + Math.random() * 34) + 'px';
+        sp.style.animationDuration = (2.4 + Math.random() * 2.4) + 's';
+        sp.style.animationDelay = (Math.random() * 1.2) + 's';
+        sp.style.setProperty('--rot', ((Math.random() - .5) * 720) + 'deg');
+        frag.append(sp);
+      }
+      rain.append(frag);
+    }
+
+    function reset() {
+      clear();
+      card.className = 'rv-card';
+      $('#rv-sign').classList.remove('show');
+      actions.classList.remove('show');
+      $('#rv-msg').textContent = '';
+      $('#rv-msg').style.fontSize = '';
+    }
+
+    function show(d) {
+      data = d;
+      reset();
+      setTheme(d.th);
+      sec.hidden = false;
+      gate.hidden = false;
+      stage.hidden = true;
+      const who = d.from || 'Quelqu’un';
+      $('#rv-title').textContent = d.to ? `${d.to}, ${who} t’a répondu` : `${who} t’a répondu`;
+      $('#rv-emoji').textContent = d.re || '💌';
+      $('#rv-greet').textContent = d.to ? d.to + ',' : 'Coucou,';
+      $('#rv-sign').textContent = '— ' + who;
+      document.title = `${who} t’a répondu 💌`;
+      scrollTo(0, 0);
+    }
+
+    function play() {
+      reset();
+      gate.hidden = true;
+      stage.hidden = false;
+      Music.chime();
+      requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('in')));
+      later(() => {
+        card.classList.add('flip');
+        Music.swell(3.5);
+      }, 1200);
+      later(() => {
+        const r = card.getBoundingClientRect();
+        Sky.burst(r.left + r.width / 2, r.top, 90, { power: 9 });
+        emojiRain(data.re || '✨');
+      }, 2150);
+      later(() => {
+        const text = data.m.trim() || 'a réagi à ta carte ' + (data.re || '💌');
+        const el = $('#rv-msg'), wrap = el.parentElement;
+        el.textContent = text;
+        let size = parseFloat(getComputedStyle(el).fontSize) || 16, guard = 0;
+        while (wrap.scrollHeight > wrap.clientHeight + 1 && size > 10 && guard++ < 60) { size *= .94; el.style.fontSize = size + 'px'; }
+        typing = typeWriter(el, text, () => {
+          $('#rv-sign').classList.add('show');
+          later(() => { actions.classList.add('show'); Sky.rain(50); }, 900);
+        });
+      }, 2600);
+    }
+
+    $('#rv-open').addEventListener('click', play);
+    $('#rv-replay').addEventListener('click', play);
+    card.addEventListener('click', () => { if (typing && !typing.done) typing.finish(); });
+    $('#rv-make').addEventListener('click', e => {
+      e.preventDefault();
+      history.pushState(null, '', location.pathname + location.search);
+      route();
+    });
+
+    return { show, hide() { clear(); sec.hidden = true; } };
+  })();
+
+  /* ------------------------------------------------------------
      Navigation
      ------------------------------------------------------------ */
   function parseHash() {
     const h = location.hash;
     let m = h.match(/[#&]k=([A-Za-z0-9_-]{6,32})/);
     if (m) return { kind: 'remote', id: m[1], notrack: /[#&]notrack\b/.test(h) };
+    m = h.match(/[#&]r=([^&]+)/);
+    if (m) {
+      try { return { kind: 'reply', data: sanitizeReply(decode(m[1])) }; } catch { return { kind: 'invalid' }; }
+    }
     if (/^#apercu\b/.test(h)) return previewData ? { kind: 'local', data: previewData, preview: true } : null;
     m = h.match(/[#&]c=([^&]+)/);
     if (m) {
@@ -1783,6 +1901,7 @@
   }
 
   function showViewer(theme) {
+    ReplyView.hide();
     Share.close();
     Reply.close();
     $('#creator').hidden = true;
@@ -1795,6 +1914,7 @@
 
   let visitLogged = false;
   function showCreator() {
+    ReplyView.hide();
     Viewer.stop();
     Reply.close();
     $('#viewer').hidden = true;
@@ -1809,6 +1929,18 @@
   async function route() {
     const seq = ++routeSeq;
     const r = parseHash();
+    if (r && r.kind === 'reply') {
+      Share.close();
+      Reply.close();
+      Viewer.stop();
+      $('#creator').hidden = true;
+      $('#viewer').hidden = true;
+      document.body.classList.remove('v-mode');
+      Sky.setNear(true);
+      ReplyView.show(r.data);
+      API.track('visit', null, 'reponse');
+      return;
+    }
     if (r && r.kind === 'remote') {
       showViewer(null);
       Viewer.loading();
